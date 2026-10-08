@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
       host: mode === 'xr' ? true : 'localhost', port: 5173, allowedHosts: env.NGROK_HOST ? [env.NGROK_HOST] : [],
     },
     preview: {
-      host: mode === 'xr' ? true : 'localhost', port: 4273, allowedHosts: env.NGROK_HOST ? [env.NGROK_HOST] : [],
+      host: mode === 'xr' ? true : 'localhost', port: 5273, allowedHosts: env.NGROK_HOST ? [env.NGROK_HOST] : [],
     },
   };
 });
