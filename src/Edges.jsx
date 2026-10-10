@@ -16,6 +16,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 //   sky through them and blot out the see-through faces behind.
 //   Chrome: polished metal, lit by a neutral studio so it reads on
 //   any background (a mirror of the starfield would be nearly black).
+// `opacity` fades the frame (the 2D shadow draws it at half strength).
 
 export const EDGE_LOOKS = ['off', 'glow', 'glass', 'chrome'];
 export const EDGE_LOOK_LABELS = { off: 'Off', glow: 'Glow', glass: 'Glass', chrome: 'Chrome' };
@@ -27,9 +28,9 @@ const GLOW_WIDTH = 1.15; // the glow tube is this much wider than a metal one, f
 /** Tube radius: thinner on the dense polytopes so the frame doesn't fill them in. */
 const tubeRadius = (poly) => poly.radius * Math.min(0.012, 0.09 / Math.sqrt(poly.edges.length));
 
-function createGlowMaterial() {
+function createGlowMaterial(opacity) {
   return new THREE.ShaderMaterial({
-    uniforms: { color: { value: GLOW_COLOR } },
+    uniforms: { color: { value: GLOW_COLOR.clone().multiplyScalar(opacity) } },
     vertexShader: /* glsl */ `
       varying float vFacing;
       void main() {
@@ -59,7 +60,7 @@ function createGlowMaterial() {
   });
 }
 
-function createGlassMaterial(envMap) {
+function createGlassMaterial(envMap, opacity) {
   return new THREE.MeshPhysicalMaterial({
     color: '#000000', // no body colour: reflections only
     metalness: 0,
@@ -67,15 +68,16 @@ function createGlassMaterial(envMap) {
     ior: 1.5,
     specularIntensity: 1,
     envMap,
-    envMapIntensity: 1.6,
+    envMapIntensity: 1.6 * opacity,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
 }
 
-function createMetalMaterial(color, envMap) {
-  return new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: 0.18, envMap });
+function createMetalMaterial(color, envMap, opacity) {
+  const fading = opacity < 1;
+  return new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: 0.18, envMap, opacity, transparent: fading, depthWrite: !fading });
 }
 
 const _a = new THREE.Vector3();
@@ -88,7 +90,7 @@ const _matrix = new THREE.Matrix4();
 const _up = new THREE.Vector3(0, 1, 0);
 
 /** The polytope's edge frame in `look`; mount inside the model's group. */
-export function Edges({ poly, look }) {
+export function Edges({ poly, look, opacity = 1 }) {
   const gl = useThree((s) => s.gl);
   const tubes = useRef(null);
   const joints = useRef(null);
@@ -105,10 +107,10 @@ export function Edges({ poly, look }) {
   useEffect(() => () => studio.dispose(), [studio]);
 
   const material = useMemo(() => {
-    if (look === 'glow') return createGlowMaterial();
-    if (look === 'glass') return createGlassMaterial(studio.texture);
-    return createMetalMaterial('#e8ecf2', studio.texture);
-  }, [look, studio]);
+    if (look === 'glow') return createGlowMaterial(opacity);
+    if (look === 'glass') return createGlassMaterial(studio.texture, opacity);
+    return createMetalMaterial('#e8ecf2', studio.texture, opacity);
+  }, [look, studio, opacity]);
   useEffect(() => () => material.dispose(), [material]);
 
   // unit tube along +Y (its ends at y = ±0.5) and unit ball, scaled per instance

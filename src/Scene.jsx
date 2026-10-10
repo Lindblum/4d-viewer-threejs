@@ -57,6 +57,8 @@ const SHADOW_Y = 0.1;
 // travels with the player. Constants, so a re-render never undoes a move.
 const MENU_POSITION = [0, 0.95, -0.75];
 const MENU_ROTATION = [-0.55, 0, 0];
+// a phone's stereo view is blurrier and smaller than a headset's: a bigger panel stays readable
+const PHONE_STEREO_MENU_SCALE = 1.5;
 
 function Sky({ passthrough }) {
   const texture = useLoader(THREE.TextureLoader, SKY_URL);
@@ -181,7 +183,8 @@ function SkyEnvironment() {
 
 /**
  * The polytope in `model`, a group the grip controls move, turn and scale.
- * Its shadow is the same shape squashed flat onto the floor straight below.
+ * Its shadow is the same shape squashed flat onto the floor straight below,
+ * in the same Faces and Edges looks at half strength.
  */
 function PolytopeView({ model, poly, look, edges, speed, visible, showShadow, inSession, onSelect }) {
   const [hovered, setHovered] = useState(false);
@@ -234,7 +237,8 @@ function PolytopeView({ model, poly, look, edges, speed, visible, showShadow, in
         // flatten the turned and scaled shape onto the floor: a cheap projected shadow
         <group ref={shadow} scale={[1, 0.001, 1]}>
           <group ref={shadowBody}>
-            <PolytopeBody poly={poly} opacity={poly.faceOpacity / 2} raycast={() => null} />
+            <PolytopeBody poly={poly} look={look} opacity={poly.faceOpacity / 2} raycast={() => null} />
+            {edges !== 'off' && <Edges poly={poly} look={edges} opacity={0.5} />}
           </group>
         </group>
       )}
@@ -337,7 +341,15 @@ export default function Scene({ poly, state, actions, menu, phone }) {
         ))}
       <PolytopeView {...polytopeProps} />
       <Player model={model} menu={menuPanel} poly={poly}>
-        {immersive && <XRMenuPanel {...menu} groupRef={menuPanel} position={MENU_POSITION} rotation={MENU_ROTATION} />}
+        {immersive && (
+          <XRMenuPanel
+            {...menu}
+            groupRef={menuPanel}
+            position={MENU_POSITION}
+            rotation={MENU_ROTATION}
+            scale={phone && state.stereo ? PHONE_STEREO_MENU_SCALE : 1}
+          />
+        )}
       </Player>
       {immersive && !hasControllers && <GazeReticle />}
       {state.handheld ? (
