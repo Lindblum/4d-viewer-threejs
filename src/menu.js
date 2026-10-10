@@ -2,6 +2,10 @@
 // (drawn on a canvas): one list of buttons, each "Name: Value", that cycle
 // their setting when pressed.
 
+import { SHAPES } from './polytopeGeometry.js';
+import { FACE_LOOKS, FACE_LOOK_LABELS } from './faceLooks.js';
+import { EDGE_LOOKS, EDGE_LOOK_LABELS } from './Edges.jsx';
+
 export const MENU_TITLE = '4D Polytope Viewer';
 
 /** Options → Background, in the order the button cycles through them (passthrough last). */
@@ -17,15 +21,58 @@ export function nextBackground(current, passthroughAvailable) {
   return choices[(choices.indexOf(current) + 1) % choices.length];
 }
 
+/**
+ * Options → View, in cycling order. Normal and 3D: SBS are windowed; the rest
+ * are XR sessions. Phones get the phone views, headsets the HMD one.
+ */
+export const VIEWS = ['normal', 'sbs', 'hmd', 'phoneAR', 'phoneViewer'];
+export const XR_VIEWS = ['hmd', 'phoneAR', 'phoneViewer'];
+const VIEW_LABELS = {
+  normal: 'Normal',
+  sbs: '3D: SBS',
+  hmd: 'XR: HMD Stereo',
+  phoneAR: 'XR: Phone AR',
+  phoneViewer: 'XR: Phone Viewer',
+};
+const VIEW_ICONS = { normal: 'monitor', sbs: 'monitorSbs', hmd: 'vr', phoneAR: 'phone', phoneViewer: 'phoneViewer' };
 
 /**
- * Items: { id, label, icon, disabled?, title? }.
- * `env`: { passthroughAvailable, xr: 'on' | 'off' | 'unavailable' | 'checking' }.
+ * The views this device can show. `env`: { phone, headset, xrSupported }.
+ * A headset browser's own window can't show side-by-side usefully, so no SBS there.
+ */
+export function availableViews(env) {
+  return VIEWS.filter((view) => {
+    if (view === 'sbs') return !env.headset;
+    if (view === 'hmd') return !env.phone && env.xrSupported;
+    if (view === 'phoneAR' || view === 'phoneViewer') return env.phone;
+    return true;
+  });
+}
+
+/** The view after `current` in `available`. */
+export function nextView(current, available) {
+  return available[(available.indexOf(current) + 1) % available.length];
+}
+
+/**
+ * A label's setting name and its value, split at the first ": ". The panels
+ * draw the name on the left and the value against the right edge.
+ */
+export function splitLabel(label) {
+  const at = label.indexOf(': ');
+  return at < 0 ? { name: label, value: '' } : { name: label.slice(0, at), value: label.slice(at + 2) };
+}
+
+/**
+ * Items: { id, label ("Name: Value", see splitLabel), icon, disabled?, title? }.
+ * `env`: { passthroughAvailable, views (available), checking }.
  */
 export function menuItems(state, env) {
   const items = [
     { id: 'shape', label: `Shape: ${state.shape.name} ${state.shape.schlafli}`, icon: 'shape' },
-    { id: 'shadow', label: `Shadow: ${state.showShadow ? 'On' : 'Off'}`, icon: state.showShadow ? 'on' : 'off' },
+    { id: 'faces', label: `Faces: ${FACE_LOOK_LABELS[state.faces]}`, icon: 'faces' },
+    { id: 'edges', label: `Edges: ${EDGE_LOOK_LABELS[state.edges]}`, icon: 'edges' },
+    { id: 'shadow', label: `2D Shadow: ${state.showShadow ? 'On' : 'Off'}`, icon: state.showShadow ? 'on' : 'off' },
     { id: 'rotate', label: `Rotate: ${state.paused ? 'Off' : 'On'}`, icon: state.paused ? 'pause' : 'rotate' },
     {
       id: 'background',
@@ -34,21 +81,32 @@ export function menuItems(state, env) {
       title: env.passthroughAvailable ? undefined : 'Passthrough needs an XR headset or a phone camera',
     },
   ];
-  const xrLabel = { on: 'On', off: 'Off', unavailable: 'Unavailable', checking: 'Off' }[env.xr];
+  const xrMissing = !env.views.some((view) => XR_VIEWS.includes(view));
   items.push({
-    id: 'xr',
-    label: `XR: ${xrLabel}`,
-    icon: env.xr === 'unavailable' ? 'vrOff' : 'vr',
-    disabled: env.xr === 'unavailable' || env.xr === 'checking',
-    title: env.xr === 'unavailable' ? "WebXR isn't available here. Open the page in a headset browser over HTTPS." : undefined,
-  });
-  // Mono: one view. Stereo: two lens-corrected eyes for a phone viewer
-  // (headsets always display stereo, whichever is chosen).
-  items.push({
-    id: 'xrmode',
-    label: `XR Mode: ${state.stereo ? 'Stereo' : 'Mono'}`,
-    icon: state.stereo ? 'stereo' : 'mono',
-    disabled: env.xr === 'unavailable',
+    id: 'view',
+    label: `View Mode: ${VIEW_LABELS[state.view]}`,
+    icon: VIEW_ICONS[state.view],
+    // SBS needs no XR, so the button works while XR support is still being checked
+    disabled: env.views.length < 2,
+    title: xrMissing && !env.checking ? "WebXR isn't available here. Open the page in a headset browser over HTTPS for XR." : undefined,
   });
   return items;
+}
+
+/**
+ * Every label the buttons can show in this environment, so both panels can
+ * size themselves to the widest one and not change width as values change.
+ */
+export function possibleLabels(env) {
+  const labels = new Set();
+  const backgrounds = BACKGROUNDS.filter((b) => b !== 'passthrough' || env.passthroughAvailable);
+  for (const shape of SHAPES)
+    for (const flag of [false, true])
+      for (const background of backgrounds)
+        for (const view of env.views)
+          for (const item of menuItems({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off' }, env))
+            labels.add(item.label);
+  for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
+  for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
+  return [...labels];
 }

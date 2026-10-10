@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { iconSvg } from './Icon.jsx';
+import { splitLabel } from './menu.js';
 import { useGazeTarget } from './Gaze.jsx';
 
 // The options panel in XR. It draws the same menu model as the windowed
@@ -9,8 +10,8 @@ import { useGazeTarget } from './Gaze.jsx';
 // elements. Collapsed, it is just the gear button. Controller rays, hand
 // pinches and gaze pick a control from where they hit the texture.
 
-const WIDTH_M = 0.44;
-const W = 1000; // canvas px
+const W = 1000; // canvas px of the reference width...
+const WIDTH_M = 0.44; // ...which is this many metres: sets the text size in XR
 const PAD = 40;
 const TITLE_Y = 72;
 const LINE_H = 40; // the XR status line
@@ -19,7 +20,10 @@ const GAP = 22;
 const ICON = 44;
 const ICON_GAP = 28; // between icon and text
 const TOGGLE = 72; // collapse arrow size
-const GEAR = 250; // the collapsed panel: one gear button about 11 cm across
+// the collapsed panel: one gear button in the open panel's top-left corner,
+// sized like the windowed one (44 px beside a 340 px panel), about 6 cm
+const GEAR = Math.round((44 / 340) * W);
+const PX_M = WIDTH_M / W; // metres per canvas px
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 export const MENU_TOGGLE = 'menu:toggle';
 
@@ -35,13 +39,37 @@ function iconImage(name, onLoad) {
   return img;
 }
 
-/** Canvas height and the hit rectangles ({ id, x, y, w, h }) for this state. */
-function layout(open, items, lines) {
-  if (!open) return { height: GEAR, rects: [{ id: MENU_TOGGLE, x: (W - GEAR) / 2, y: 0, w: GEAR, h: GEAR }] };
+const BUTTON_FONT = `500 34px ${FONT}`;
+const TITLE_FONT = `650 46px ${FONT}`;
+const INSET = 18; // icon from the button's left edge, text from its right
+const VALUE_GAP = 40; // at least this between a setting's name and its value
+
+let measureCtx;
+function textWidth(text, font) {
+  measureCtx ??= document.createElement('canvas').getContext('2d');
+  measureCtx.font = font;
+  return measureCtx.measureText(text).width;
+}
+
+/** The open panel's width: the widest possible button, or the title row if wider. */
+function labelWidth(label) {
+  const { name, value } = splitLabel(label);
+  return value ? textWidth(`${name}:`, BUTTON_FONT) + VALUE_GAP + textWidth(value, BUTTON_FONT) : textWidth(name, BUTTON_FONT);
+}
+
+function panelWidth(title, labels) {
+  const button = INSET + ICON + ICON_GAP + Math.max(0, ...labels.map(labelWidth)) + INSET;
+  const titleRow = TOGGLE + 24 + textWidth(title, TITLE_FONT);
+  return Math.ceil(2 * PAD + Math.max(button, titleRow));
+}
+
+/** Canvas size and the hit rectangles ({ id, x, y, w, h }) for this state. */
+function layout(open, items, lines, panelW) {
+  if (!open) return { width: GEAR, height: GEAR, rects: [{ id: MENU_TOGGLE, x: 0, y: 0, w: GEAR, h: GEAR }] };
   const first = TITLE_Y + 34 + lines * LINE_H + 16;
   const rects = [{ id: MENU_TOGGLE, x: PAD, y: TITLE_Y - TOGGLE / 2, w: TOGGLE, h: TOGGLE }];
-  items.forEach((item, i) => rects.push({ id: item.id, item, x: PAD, y: first + i * (BUTTON_H + GAP), w: W - 2 * PAD, h: BUTTON_H }));
-  return { height: first + items.length * (BUTTON_H + GAP) - GAP + PAD, rects };
+  items.forEach((item, i) => rects.push({ id: item.id, item, x: PAD, y: first + i * (BUTTON_H + GAP), w: panelW - 2 * PAD, h: BUTTON_H }));
+  return { width: panelW, height: first + items.length * (BUTTON_H + GAP) - GAP + PAD, rects };
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -72,20 +100,23 @@ function drawButtonFrame(ctx, r, { hot, disabled }) {
   ctx.stroke();
 }
 
-export function XRMenuPanel({ title, status, items, open, onSelect, ...groupProps }) {
+export function XRMenuPanel({ title, status, items, labels, open, onSelect, groupRef, ...groupProps }) {
   const mesh = useRef(null);
   const [pointerKey, setPointerKey] = useState(null);
   const [gazeKey, setGazeKey] = useState(null);
   const [iconsLoaded, setIconsLoaded] = useState(0);
   const lines = status ? 1 : 0;
-  const { height, rects } = useMemo(() => layout(open, items, lines), [open, items, lines]);
+  const panelW = useMemo(() => panelWidth(title, labels ?? items.map((i) => i.label)), [title, labels, items]);
+  const { width, height, rects } = useMemo(() => layout(open, items, lines, panelW), [open, items, lines, panelW]);
+  // the open panel's height: collapsed, the gear keeps to its top-left corner
+  const openHeight = useMemo(() => layout(true, items, lines, panelW).height, [items, lines, panelW]);
 
   const canvas = useMemo(() => {
     const c = document.createElement('canvas');
-    c.width = W;
+    c.width = width;
     c.height = height;
     return c;
-  }, [height]);
+  }, [width, height]);
   const texture = useMemo(() => {
     const t = new THREE.CanvasTexture(canvas);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -98,23 +129,26 @@ export function XRMenuPanel({ title, status, items, open, onSelect, ...groupProp
   useEffect(() => {
     const ctx = canvas.getContext('2d');
     const redraw = () => setIconsLoaded((n) => n + 1);
-    ctx.clearRect(0, 0, W, height);
+    ctx.clearRect(0, 0, width, height);
 
     if (!open) {
-      // collapsed: only the gear button, like the windowed panel
+      // collapsed: only the gear button, styled like the windowed one
       const r = rects[0];
-      roundRect(ctx, r.x + 4, r.y + 4, r.w - 8, r.h - 8, 44);
-      ctx.fillStyle = 'rgba(12, 16, 28, 0.9)';
+      const hot = hovered === MENU_TOGGLE;
+      roundRect(ctx, r.x + 2, r.y + 2, r.w - 4, r.h - 4, 34);
+      ctx.fillStyle = hot ? 'rgba(40, 46, 66, 0.95)' : 'rgba(12, 16, 28, 0.9)';
       ctx.fill();
-      drawButtonFrame(ctx, { x: r.x + 24, y: r.y + 24, w: r.w - 48, h: r.h - 48 }, { hot: hovered === MENU_TOGGLE });
+      ctx.strokeStyle = hot ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255, 255, 255, 0.18)';
+      ctx.lineWidth = hot ? 4 : 3;
+      ctx.stroke();
       const img = iconImage('gear', redraw);
-      const size = r.w * 0.45;
+      const size = r.w * (18 / 44);
       if (img.complete && img.naturalWidth) ctx.drawImage(img, r.x + (r.w - size) / 2, r.y + (r.h - size) / 2, size, size);
       texture.needsUpdate = true;
       return;
     }
 
-    roundRect(ctx, 4, 4, W - 8, height - 8, 40);
+    roundRect(ctx, 4, 4, width - 8, height - 8, 40);
     ctx.fillStyle = 'rgba(12, 16, 28, 0.9)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
@@ -123,12 +157,12 @@ export function XRMenuPanel({ title, status, items, open, onSelect, ...groupProp
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
-    ctx.font = `650 46px ${FONT}`;
-    centredText(ctx, fit(ctx, title, W - 2 * PAD - TOGGLE - 24), PAD + TOGGLE + 24, TITLE_Y);
+    ctx.font = TITLE_FONT;
+    centredText(ctx, fit(ctx, title, width - 2 * PAD - TOGGLE - 24), PAD + TOGGLE + 24, TITLE_Y);
     if (status) {
       ctx.fillStyle = 'rgba(232, 236, 246, 0.6)';
       ctx.font = `400 26px ${FONT}`;
-      centredText(ctx, fit(ctx, status, W - 2 * PAD), PAD, TITLE_Y + 34 + LINE_H / 2);
+      centredText(ctx, fit(ctx, status, width - 2 * PAD), PAD, TITLE_Y + 34 + LINE_H / 2);
     }
 
     for (const r of rects) {
@@ -150,19 +184,29 @@ export function XRMenuPanel({ title, status, items, open, onSelect, ...groupProp
       drawButtonFrame(ctx, r, { hot: item.id === hovered && !item.disabled, disabled: item.disabled });
       ctx.globalAlpha = item.disabled ? 0.4 : 1;
       const img = iconImage(item.icon, redraw);
-      if (img.complete && img.naturalWidth) ctx.drawImage(img, r.x + 18, r.y + (r.h - ICON) / 2, ICON, ICON);
+      if (img.complete && img.naturalWidth) ctx.drawImage(img, r.x + INSET, r.y + (r.h - ICON) / 2, ICON, ICON);
       ctx.fillStyle = '#ffffff';
-      ctx.font = `500 34px ${FONT}`;
-      const tx = r.x + 18 + ICON + ICON_GAP;
-      centredText(ctx, fit(ctx, item.label, r.x + r.w - 18 - tx), tx, r.y + r.h / 2);
+      ctx.font = BUTTON_FONT;
+      // the name on the left, the value against the right edge
+      const tx = r.x + INSET + ICON + ICON_GAP;
+      const right = r.x + r.w - INSET;
+      const { name, value } = splitLabel(item.label);
+      const nameText = value ? `${name}:` : name;
+      centredText(ctx, fit(ctx, nameText, right - tx), tx, r.y + r.h / 2);
+      if (value) {
+        const room = right - tx - ctx.measureText(nameText).width - VALUE_GAP;
+        ctx.textAlign = 'right';
+        centredText(ctx, fit(ctx, value, room), right, r.y + r.h / 2);
+        ctx.textAlign = 'left';
+      }
       ctx.globalAlpha = 1;
     }
     texture.needsUpdate = true;
-  }, [canvas, texture, height, rects, open, title, status, hovered, iconsLoaded]);
+  }, [canvas, texture, width, height, rects, open, title, status, hovered, iconsLoaded]);
 
   const pick = (hit) => {
     if (!hit?.uv) return null;
-    const px = hit.uv.x * W;
+    const px = hit.uv.x * width;
     const py = (1 - hit.uv.y) * height;
     const r = rects.find((q) => px >= q.x && px <= q.x + q.w && py >= q.y && py <= q.y + q.h);
     return r && !r.item?.disabled ? r.id : null;
@@ -170,9 +214,10 @@ export function XRMenuPanel({ title, status, items, open, onSelect, ...groupProp
   useGazeTarget(mesh, onSelect, setGazeKey, pick);
 
   return (
-    <group {...groupProps}>
+    <group ref={groupRef} {...groupProps}>
       <mesh
         ref={mesh}
+        position={[((width - panelW) / 2) * PX_M, ((openHeight - height) / 2) * PX_M, 0]}
         onPointerMove={(e) => setPointerKey(pick(e))}
         onPointerOut={() => setPointerKey(null)}
         onClick={(e) => {
@@ -182,7 +227,7 @@ export function XRMenuPanel({ title, status, items, open, onSelect, ...groupProp
           onSelect(key);
         }}
       >
-        <planeGeometry args={[WIDTH_M, (WIDTH_M * height) / W]} />
+        <planeGeometry args={[width * PX_M, height * PX_M]} />
         <meshBasicMaterial map={texture} transparent depthWrite={false} toneMapped={false} />
       </mesh>
     </group>

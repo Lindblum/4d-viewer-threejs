@@ -53,6 +53,8 @@ function directionColor(v) {
  * triangles around its centre, once per cell it bounds, and tinted by that
  * cell's direction. Positions are projected to 3D by dropping w.
  */
+const HULL_EPSILON = 1e-6;
+
 export function buildPolytope(index, radius = 1) {
   const shape = SHAPES[index];
   const poly = new Polytope();
@@ -60,7 +62,8 @@ export function buildPolytope(index, radius = 1) {
 
   const nVerts = poly.verts.length;
   const faceCenters = poly.faces.map((face) =>
-    face.reduce((sum, v) => sum.add(poly.verts[v]), new THREE.Vector4()).divideScalar(face.length),
+    // start from zero: a bare Vector4() has w = 1
+    face.reduce((sum, v) => sum.add(poly.verts[v]), new THREE.Vector4(0, 0, 0, 0)).divideScalar(face.length),
   );
   const scale = radius / poly.verts[0].length();
   // 4D rest positions: vertices followed by face centres
@@ -96,6 +99,39 @@ export function buildPolytope(index, radius = 1) {
   const current = rest.map((v) => v.clone());
   const rotation = new THREE.Matrix4();
   const step = new THREE.Matrix4();
+  // The 3D shape is the convex hull of the projected vertices. Each side of
+  // that hull lies in the plane of some projected 2D face (a cell seen
+  // edge-on still has faces in its plane), so the hull is the set of face
+  // planes with every vertex on one side. Rebuilt on demand after a rotation.
+  const hullPlanes = [];
+  let hullStale = true;
+  const _a = new THREE.Vector3();
+  const _b = new THREE.Vector3();
+  const _c = new THREE.Vector3();
+
+  function rebuildHull() {
+    hullPlanes.length = 0;
+    for (const face of poly.faces) {
+      _a.copy(current[face[0]]);
+      _b.copy(current[face[1]]).sub(_a);
+      _c.copy(current[face[2]]).sub(_a);
+      const normal = _b.cross(_c);
+      if (normal.lengthSq() < 1e-12) continue; // face seen edge-on
+      normal.normalize();
+      const offset = normal.dot(_a);
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = 0; i < nVerts && (min >= -HULL_EPSILON || max <= HULL_EPSILON); i++) {
+        // stops once vertices lie on both sides: an inner face, as most are
+        const d = normal.x * current[i].x + normal.y * current[i].y + normal.z * current[i].z - offset;
+        min = Math.min(min, d);
+        max = Math.max(max, d);
+      }
+      // a supporting plane: keep it facing outward
+      if (max <= HULL_EPSILON) hullPlanes.push(new THREE.Plane(normal.clone().negate(), offset));
+      else if (min >= -HULL_EPSILON) hullPlanes.push(new THREE.Plane(normal.clone(), -offset));
+    }
+  }
 
   function writePositions() {
     const fp = facePositions.array;
@@ -121,12 +157,28 @@ export function buildPolytope(index, radius = 1) {
     // denser polytopes get fainter faces so the interior stays readable
     faceOpacity: Math.min(1, 3 / Math.sqrt(poly.faces.length)),
     faceGeometry,
+    radius,
+    /** Edges as vertex index pairs, and each vertex's projected position (x, y, z; w is dropped). */
+    edges: poly.edges,
+    vertexCount: nVerts,
+    vertex: (i) => current[i],
     /** Advance the 4D rotation by `angle` radians per plane. */
     rotate(angle) {
       rotation.premultiply(spinMatrix(poly.dimension, angle, step));
       // rotate from the rest pose each frame so vertices never accumulate drift
       for (let i = 0; i < rest.length; i++) current[i].copy(rest[i]).applyMatrix4(rotation);
       writePositions();
+      hullStale = true;
+    },
+    /** Whether `point` (in the polytope's own space) is inside the shape as drawn. */
+    containsPoint(point) {
+      if (point.lengthSq() > radius * radius + HULL_EPSILON) return false; // outside the circumsphere
+      if (hullStale) {
+        rebuildHull();
+        hullStale = false;
+      }
+      // THREE.Plane distance is positive on the side its normal points to, the inside
+      return hullPlanes.every((plane) => plane.distanceToPoint(point) >= -HULL_EPSILON);
     },
     dispose() {
       faceGeometry.dispose();

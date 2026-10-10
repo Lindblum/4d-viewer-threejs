@@ -7,21 +7,22 @@ import { MENU_TOGGLE } from './XRMenuPanel.jsx';
 import { PHONE_AR_SESSION_INIT } from './PhoneStereo.jsx';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
-import { MENU_TITLE, menuItems, nextBackground } from './menu.js';
+import { nextFaceLook } from './faceLooks.js';
+import { nextEdgeLook } from './Edges.jsx';
+import { MENU_TITLE, splitLabel, XR_VIEWS, availableViews, menuItems, nextBackground, nextView, possibleLabels } from './menu.js';
 
-// How the three XR settings work:
+// How the display settings work:
 //   Background (Solid / Skybox / Passthrough): what is behind the model. Changes live.
-//   XR (Off / On): enters or leaves XR. The only thing that starts a session,
-//     and only from a tap, as browsers require.
-//   XR Mode (Mono / Stereo): one view, or two lens-corrected eyes for a phone
-//     viewer. Changes live; never restarts a session.
+//   View: cycles through the views this device supports (see menu.js):
+//     Normal and 3D: SBS (half side-by-side, for 3D TVs) are windowed.
+//     The XR views start a session, only from a tap, as browsers require.
 //
-// Headsets: XR On starts an AR session where supported (so every background,
-// passthrough included, can be switched live), otherwise VR. Headsets always
-// display stereo, so XR Mode does not change them.
-// Phones: XR On starts one AR session (tracked by ARCore) that the app draws
-// as one view or two. Phones without AR get a view steered by the motion
-// sensors instead, with the rear camera for passthrough.
+// XR: HMD Stereo (headsets) starts an AR session where supported (so every
+// background, passthrough included, can be switched live), otherwise VR.
+// XR: Phone AR / Phone Viewer start one AR session (tracked by ARCore) that
+// the app draws as one view, or two lens-corrected eyes for a phone viewer;
+// switching between the two is live. Phones without AR get a view steered by
+// the motion sensors instead, with the rear camera for passthrough.
 
 // kept as a reference: the store reads it whenever a session starts
 const xrOptions = {
@@ -48,9 +49,13 @@ function enterPhoneAR() {
  * device rather than by WebXR support: some phone browsers also report VR.
  */
 function isPhone() {
-  const ua = navigator.userAgent;
-  if (/OculusBrowser|Quest|Pico|Wolvic/i.test(ua)) return false;
-  return /Android|iPhone|iPad|Mobile/i.test(ua) && canUseCardboard();
+  if (isHeadsetBrowser()) return false;
+  return /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && canUseCardboard();
+}
+
+/** A headset's own browser (Quest, Pico, Wolvic). */
+function isHeadsetBrowser() {
+  return /OculusBrowser|Quest|Pico|Wolvic/i.test(navigator.userAgent);
 }
 
 const wrap = (i, n) => (i + n) % n;
@@ -58,10 +63,13 @@ const wrap = (i, n) => (i + n) % n;
 function useViewerState() {
   const [shapeIndex, setShapeIndex] = useState(DEFAULT_SHAPE_INDEX);
   const [background, setBackground] = useState('skybox'); // 'solid' | 'skybox' | 'passthrough'
-  const [xrMode, setXrMode] = useState('stereo'); // 'mono' | 'stereo'
+  const [screenView, setScreenView] = useState('normal'); // outside XR: 'normal' | 'sbs'
+  const [phoneStereo, setPhoneStereo] = useState(true); // phone XR: two lens-corrected eyes
   const [handheld, setHandheld] = useState(false); // the motion-sensor view is showing (phones without AR)
   const [showPolytope, setShowPolytope] = useState(true);
   const [showShadow, setShowShadow] = useState(true);
+  const [faces, setFaces] = useState('glow'); // see faceLooks.js
+  const [edges, setEdges] = useState('off'); // see Edges.jsx
   const [paused, setPaused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
 
@@ -71,10 +79,13 @@ function useViewerState() {
       nextShape: () => setShapeIndex((i) => wrap(i + 1, SHAPES.length)),
       prevShape: () => setShapeIndex((i) => wrap(i - 1, SHAPES.length)),
       setBackground,
-      toggleXrMode: () => setXrMode((m) => (m === 'stereo' ? 'mono' : 'stereo')),
+      setScreenView,
+      setPhoneStereo,
       setHandheld,
       togglePolytope: () => setShowPolytope((v) => !v),
       toggleShadow: () => setShowShadow((v) => !v),
+      nextFaces: () => setFaces(nextFaceLook),
+      nextEdges: () => setEdges(nextEdgeLook),
       togglePause: () => setPaused((v) => !v),
       toggleMenu: () => setMenuOpen((v) => !v),
     }),
@@ -86,11 +97,13 @@ function useViewerState() {
     shape: SHAPES[shapeIndex],
     background,
     passthrough: background === 'passthrough',
-    xrMode,
-    stereo: xrMode === 'stereo',
+    screenView,
+    stereo: phoneStereo,
     handheld,
     showPolytope,
     showShadow,
+    faces,
+    edges,
     paused,
     menuOpen,
   };
@@ -133,15 +146,35 @@ const getSessionMode = () => store.getState().mode ?? null;
 
 const describe = (e) => `${e?.name ?? 'Error'}${e?.message ? ` - ${e.message}` : ''}`;
 
-function MenuButtons({ items, onSelect }) {
+/** "Name: Value": the name on the left, the value against the right edge. */
+function Label({ text }) {
+  const { name, value } = splitLabel(text);
+  return (
+    <span className="label">
+      <span className="name">{value ? `${name}:` : name}</span>
+      {value && <span className="value">{value}</span>}
+    </span>
+  );
+}
+
+function MenuButtons({ items, labels, onSelect }) {
   return (
     <div className="menu-items">
       {items.map((item) => (
         <button key={item.id} className="menu-btn" disabled={item.disabled} title={item.title} onClick={() => onSelect(item.id)}>
           <Icon name={item.icon} />
-          <span className="label">{item.label}</span>
+          <Label text={item.label} />
         </button>
       ))}
+      {/* invisible, zero-height copies of every possible label: they set the panel's width */}
+      <div className="menu-sizer" aria-hidden="true">
+        {labels.map((label) => (
+          <div key={label} className="menu-btn">
+            <Icon name="shape" />
+            <Label text={label} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -169,7 +202,7 @@ function Hud({ menu, error }) {
 
       <div>
         {menu.status && <p className="stats">{menu.status}</p>}
-        <MenuButtons items={menu.items} onSelect={menu.onSelect} />
+        <MenuButtons items={menu.items} labels={menu.labels} onSelect={menu.onSelect} />
         {error && (
           <p className="note error" role="alert">
             {error}
@@ -181,28 +214,32 @@ function Hud({ menu, error }) {
 }
 
 export default function App() {
-  const [state, actions] = useViewerState();
+  const [viewerState, actions] = useViewerState();
   useKeyboard(actions);
-  const poly = useMemo(() => buildPolytope(state.shapeIndex), [state.shapeIndex]);
+  const poly = useMemo(() => buildPolytope(viewerState.shapeIndex), [viewerState.shapeIndex]);
 
   const support = useXRSupport();
   const phone = useMemo(isPhone, []);
+  const headset = useMemo(isHeadsetBrowser, []);
   const sessionActive = useSyncExternalStore(store.subscribe, getSessionActive);
   const sessionMode = useSyncExternalStore(store.subscribe, getSessionMode);
-  const inXR = sessionActive || state.handheld;
-  const xrAvailable = Boolean(support.vr || support.ar) || phone;
-  const xrStatus = inXR ? 'on' : !support.checked ? 'checking' : xrAvailable ? 'off' : 'unavailable';
+  const inXR = sessionActive || viewerState.handheld;
+  const xrSupported = Boolean(support.vr || support.ar);
+  const views = useMemo(() => availableViews({ phone, headset, xrSupported }), [phone, headset, xrSupported]);
+  // derived from the session, so the panel can never disagree with what is showing
+  const view = inXR ? (phone ? (viewerState.stereo ? 'phoneViewer' : 'phoneAR') : 'hmd') : viewerState.screenView;
+  const state = { ...viewerState, view };
   const passthroughAvailable = Boolean(support.ar) || phone;
   const [error, setError] = useState(null);
 
-  // XR: On, straight from the tap
-  const enterXR = async () => {
+  // into an XR view, straight from the tap
+  const enterXR = async (stereo) => {
     setError(null);
     let label = 'AR';
     try {
       if (phone && support.ar) await enterPhoneAR();
       else if (phone) {
-        enterCardboard({ landscape: state.stereo }).then((sensors) => {
+        enterCardboard({ landscape: stereo }).then((sensors) => {
           if (!sensors) console.warn('[4d-viewer] motion sensor access denied; the view will not follow the phone');
         });
         actions.setHandheld(true);
@@ -216,7 +253,7 @@ export default function App() {
       setError(`Couldn't start ${label}: ${describe(e)}`);
     }
   };
-  // XR: Off
+  // out of XR
   const exitXR = () => {
     if (state.handheld) {
       exitCardboard();
@@ -245,28 +282,41 @@ export default function App() {
   const status = !inXR
     ? null
     : state.handheld
-      ? `XR: motion sensors only (no walking), ${state.xrMode}`
+      ? `XR: motion sensors only (no walking), ${state.stereo ? 'stereo' : 'mono'}`
       : phone
-        ? `XR: phone AR, tracked, ${state.xrMode}`
+        ? `XR: phone AR, tracked, ${state.stereo ? 'stereo' : 'mono'}`
         : `XR: headset ${sessionMode === 'immersive-ar' ? 'AR' : 'VR'}`;
 
   const onSelect = (id) => {
     if (id === MENU_TOGGLE) actions.toggleMenu();
     else if (id === 'shape') actions.nextShape();
     else if (id === 'shadow') actions.toggleShadow();
+    else if (id === 'faces') actions.nextFaces();
+    else if (id === 'edges') actions.nextEdges();
     else if (id === 'rotate') actions.togglePause();
     else if (id === 'background') actions.setBackground(nextBackground(state.background, passthroughAvailable));
-    else if (id === 'xrmode') actions.toggleXrMode();
-    else if (id === 'xr') {
+    else if (id === 'view') selectView(nextView(view, views));
+  };
+  const selectView = (next) => {
+    const toXR = XR_VIEWS.includes(next);
+    if (toXR) actions.setPhoneStereo(next === 'phoneViewer');
+    if (toXR && !inXR) {
+      // if the session fails to start, the next press carries on from Normal
+      actions.setScreenView('normal');
+      enterXR(next === 'phoneViewer');
+    } else if (!toXR) {
       if (inXR) exitXR();
-      else enterXR();
+      actions.setScreenView(next);
     }
   };
+  const checking = !support.checked && !phone;
+  const labels = useMemo(() => possibleLabels({ passthroughAvailable, views }), [passthroughAvailable, views]);
   const menu = {
     title: MENU_TITLE,
+    labels,
     status,
     open: state.menuOpen,
-    items: menuItems(state, { passthroughAvailable, xr: xrStatus }),
+    items: menuItems(state, { passthroughAvailable, views, checking }),
     onSelect,
   };
 

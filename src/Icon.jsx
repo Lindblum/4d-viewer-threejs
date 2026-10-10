@@ -6,6 +6,7 @@ import eye from 'lineicons/assets/svgs/regular/eye.svg?raw';
 import gear from 'lineicons/assets/svgs/regular/gear-1.svg?raw';
 import rotate from 'lineicons/assets/svgs/regular/refresh-circle-1-clockwise.svg?raw';
 import pause from 'lineicons/assets/svgs/regular/pause.svg?raw';
+import diamond from 'lineicons/assets/svgs/regular/diamonds-1.svg?raw';
 
 // Lineicons ship with a fixed fill; recolour to follow the surrounding text
 // and size to the font.
@@ -39,6 +40,42 @@ const eyes = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none
 <circle cx="17.75" cy="12" r="1.4" fill="currentColor"/>
 </svg>`;
 
+// View Mode icons, drawn to match: a screen, the screen split in two,
+// a phone, and a phone turned sideways in a viewer (two lenses)
+const monitor = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<rect x="2.75" y="4.25" width="18.5" height="12" rx="1.75" stroke="currentColor" stroke-width="1.5"/>
+<path d="M12 16.25v3.5M8.5 19.75h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`;
+
+const monitorSbs = monitor.replace(
+  '</svg>',
+  `<path d="M12 6v8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="7.4" cy="10.25" r="1.4" fill="currentColor"/>
+<circle cx="16.6" cy="10.25" r="1.4" fill="currentColor"/>
+</svg>`,
+);
+
+const phone = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<rect x="6.75" y="2.75" width="10.5" height="18.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+<path d="M10.75 18.25h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`;
+
+const phoneViewer = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<rect x="2.75" y="6.75" width="18.5" height="10.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+<path d="M12 6.75v10.5" stroke="currentColor" stroke-width="1.5"/>
+<circle cx="7.4" cy="12" r="2.1" stroke="currentColor" stroke-width="1.5"/>
+<circle cx="16.6" cy="12" r="2.1" stroke="currentColor" stroke-width="1.5"/>
+</svg>`;
+
+// Edges: a wire frame, a ball at each corner
+const edges = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<path d="M5 5h14v14H5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<circle cx="5" cy="5" r="2" fill="currentColor"/>
+<circle cx="19" cy="5" r="2" fill="currentColor"/>
+<circle cx="5" cy="19" r="2" fill="currentColor"/>
+<circle cx="19" cy="19" r="2" fill="currentColor"/>
+</svg>`;
+
 // XR unavailable: the headset, struck through
 const headsetOff = headset.replace(
   '</svg>',
@@ -60,6 +97,12 @@ const ICONS = {
   rotate: recolour(rotate),
   pause: recolour(pause),
   shape: cube,
+  edges,
+  monitor,
+  monitorSbs,
+  phone,
+  phoneViewer,
+  faces: recolour(diamond),
 };
 
 /** An icon as a standalone SVG in a fixed colour, for drawing onto a canvas. */

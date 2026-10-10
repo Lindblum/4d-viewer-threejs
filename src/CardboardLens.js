@@ -12,9 +12,13 @@ import * as THREE from 'three';
 // is what keeps the scene still as the head turns; any mismatch shows up as
 // the world swimming.
 
-/** Google Cardboard v2 (2015), the profile most current viewers follow. Lengths in metres. */
+/**
+ * Google Cardboard v2 (2015), the profile most current viewers follow, with
+ * the lenses 1 cm closer than its 64 mm: at 64 mm the eye images sat too far
+ * apart to fuse in practice. Lengths in metres.
+ */
 export const VIEWER = {
-  interLensDistance: 0.064,
+  interLensDistance: 0.054,
   baselineLensDistance: 0.035, // lens centres above the bottom of the screen tray
   screenLensDistance: 0.039,
   distortion: [0.34, 0.55],

@@ -24,7 +24,8 @@ canvas { display: block; touch-action: none; }
   position: fixed;
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
-  width: min(340px, calc(100vw - 24px));
+  width: max-content; /* as wide as the widest possible button (see .menu-sizer) */
+  max-width: calc(100vw - 24px);
   padding: 14px 16px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -71,6 +72,13 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 
 /* options: equal-width grey buttons, one per setting, "icon  Name: Value" */
 .menu-items { display: flex; flex-direction: column; gap: 10px; }
+.menu-sizer {
+  height: 0;
+  margin-top: -10px; /* cancel the list's gap above it */
+  overflow: hidden;
+  visibility: hidden;
+}
+.menu-sizer .menu-btn { border: 1px solid transparent; }
 .menu-btn {
   display: flex;
   align-items: center;
@@ -86,7 +94,9 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 }
 .menu-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.4); }
 .menu-btn:disabled { opacity: 0.45; cursor: default; }
-.menu-btn .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.menu-btn .label { display: flex; flex: 1; gap: 18px; justify-content: space-between; min-width: 0; white-space: nowrap; line-height: 1.25; }
+.menu-btn .name { flex: none; }
+.menu-btn .value { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .icon { display: inline-flex; flex: none; align-items: center; line-height: 0; }
 .icon svg { display: block; }
 
