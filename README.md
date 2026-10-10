@@ -50,6 +50,7 @@ npm run preview
 - `src/SideBySide.jsx`: the 3D: SBS view, half side-by-side stereo on any screen
 - `src/faceLooks.js`: the Faces looks: physical materials, rim glow and the Frosted bump texture
 - `src/Edges.jsx`: the Edges frame, instanced tubes and joints re-posed every frame
+- `src/FramePacing.jsx`: cheaper refraction and ~72 fps pacing while a see-through Faces look is on
 - `src/Grab.jsx`, `src/grip.js`: grip-button controls to move, scale and turn the model
 - `src/Gaze.jsx`: gaze reticle and 1-second dwell-to-click
 - `src/menu.js`: the options menu (one list of "Name: Value" buttons) shared by both panels

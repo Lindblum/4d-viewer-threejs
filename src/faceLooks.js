@@ -12,7 +12,7 @@ export const FACE_LOOKS = ['glow', 'glass', 'diamond', 'water', 'soap', 'metal',
 export const FACE_LOOK_LABELS = { glow: 'Glow', glass: 'Glass', diamond: 'Diamond', water: 'Water', soap: 'Soap', metal: 'Metal', frosted: 'Frosted' };
 const WAVE_HEIGHT = 0.03; // in model units: with WAVE_SCALE, sets how steep the ripples are
 const WAVE_SCALE = 4.5; // waves per unit, roughly: several ripples across each face
-const WAVE_SHINE = 0.5; // the light the ripple slopes catch (see addWaves)
+const WAVE_SHINE = 0.4; // the light the ripple slopes catch (see addWaves)
 const FILM_STRENGTH = 0.35; // how strongly Soap's rainbow film shows (see addFilm)
 
 /**
@@ -61,6 +61,9 @@ const LOOKS = {
   },
   frosted: { roughness: 0.6, metalness: 0, transmission: 1, ior: 1.3, thickness: 0.4, specularIntensity: 0, alpha: 3, alphaFloor: 0.3, rim: 0.7, bumps: true },
 };
+
+/** Whether `look` refracts (transmission), which costs a second scene render per eye. */
+export const isSeeThrough = (look) => (LOOKS[look]?.transmission ?? 0) > 0;
 
 export const nextFaceLook = (current) => FACE_LOOKS[(FACE_LOOKS.indexOf(current) + 1) % FACE_LOOKS.length];
 
@@ -200,11 +203,21 @@ uniform float waveTime;
 uniform float waveHeight;
 uniform float waveScale;
 uniform float waveShine;
+// 1 for a wave whose phase moves less than about a radian per pixel, fading
+// to 0 as it nears the pixel size: finer waves can't be drawn and only
+// sparkle (far or edge-on faces, and the low-resolution foveated edges in XR)
+float waveFade( float phasePerPixel ) {
+  return 1.0 - smoothstep( 0.6, 1.6, phasePerPixel );
+}
 float waveSurface( vec3 p, float t ) {
   p *= waveScale;
-  return 0.5 * sin( dot( p, vec3( 6.0, 2.0, 3.0 ) ) + t * 1.3 )
-    + 0.35 * sin( dot( p, vec3( -3.0, 5.5, 4.0 ) ) + t * 1.7 )
-    + 0.2 * sin( dot( p, vec3( 4.0, -5.0, 7.0 ) ) * 1.6 + t * 2.3 );
+  float pixel = length( fwidth( p ) );
+  const vec3 k1 = vec3( 6.0, 2.0, 3.0 );
+  const vec3 k2 = vec3( -3.0, 5.5, 4.0 );
+  const vec3 k3 = vec3( 4.0, -5.0, 7.0 ) * 1.6;
+  return 0.5 * waveFade( length( k1 ) * pixel ) * sin( dot( p, k1 ) + t * 1.3 )
+    + 0.35 * waveFade( length( k2 ) * pixel ) * sin( dot( p, k2 ) + t * 1.7 )
+    + 0.2 * waveFade( length( k3 ) * pixel ) * sin( dot( p, k3 ) + t * 2.3 );
 }
 vec3 waveNormal( vec3 surfPos, vec3 surfNormal, vec2 dHdxy ) {
   vec3 sigmaX = dFdx( surfPos );
@@ -226,7 +239,7 @@ vec3 waveNormal( vec3 surfPos, vec3 surfNormal, vec2 dHdxy ) {
 \tfloat waveH = waveHeight * waveSurface( vWavePos, waveTime );
 \tnormal = waveNormal( - vViewPosition, normal, vec2( dFdx( waveH ), dFdy( waveH ) ) );
 \t// view space: the light comes from above and behind the viewer
-\tfloat waveGlint = waveShine * pow( max( dot( normal, normalize( vec3( 0.25, 0.55, 0.8 ) ) ), 0.0 ), 20.0 );`,
+\tfloat waveGlint = waveShine * pow( max( dot( normal, normalize( vec3( 0.25, 0.55, 0.8 ) ) ), 0.0 ), 12.0 );`,
     );
 }
 

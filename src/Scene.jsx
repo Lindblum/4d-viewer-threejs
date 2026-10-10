@@ -9,7 +9,8 @@ import { GazeReticle } from './Gaze.jsx';
 import { XRMenuPanel } from './XRMenuPanel.jsx';
 import { useControllerGrips } from './Grab.jsx';
 import { SOLID_BACKGROUND } from './menu.js';
-import { advanceWaves, createFaceMaterial } from './faceLooks.js';
+import { advanceWaves, createFaceMaterial, isSeeThrough } from './faceLooks.js';
+import { FramePacing } from './FramePacing.jsx';
 import { Edges } from './Edges.jsx';
 import { PhoneStereoCameraFeed, PhoneStereoXR } from './PhoneStereo.jsx';
 import { SideBySide } from './SideBySide.jsx';
@@ -314,6 +315,7 @@ export default function Scene({ poly, state, actions, menu, phone }) {
       ) : (
         <Backdrop background={state.background} />
       )}
+      <FramePacing seeThrough={isSeeThrough(state.faces)} />
       {state.view === 'sbs' && !immersive && <SideBySide />}
       {phoneStereo && <PhoneStereoXR />}
       {phoneStereo && state.passthrough && (
