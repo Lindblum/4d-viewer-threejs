@@ -7,6 +7,9 @@ import gear from 'lineicons/assets/svgs/regular/gear-1.svg?raw';
 import rotate from 'lineicons/assets/svgs/regular/refresh-circle-1-clockwise.svg?raw';
 import pause from 'lineicons/assets/svgs/regular/pause.svg?raw';
 import diamond from 'lineicons/assets/svgs/regular/diamonds-1.svg?raw';
+import chevronDown from 'lineicons/assets/svgs/regular/chevron-down.svg?raw';
+import chevronUp from 'lineicons/assets/svgs/regular/chevron-up.svg?raw';
+import check from 'lineicons/assets/svgs/regular/check.svg?raw';
 
 // Lineicons ship with a fixed fill; recolour to follow the surrounding text
 // and size to the font.
@@ -41,7 +44,7 @@ const eyes = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none
 </svg>`;
 
 // View Mode icons, drawn to match: a screen, the screen split in two,
-// a phone, and a phone turned sideways in a viewer (two lenses)
+// the screen in rows, a phone, and a phone turned sideways in a viewer (two lenses)
 const monitor = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
 <rect x="2.75" y="4.25" width="18.5" height="12" rx="1.75" stroke="currentColor" stroke-width="1.5"/>
 <path d="M12 16.25v3.5M8.5 19.75h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -52,6 +55,14 @@ const monitorSbs = monitor.replace(
   `<path d="M12 6v8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 <circle cx="7.4" cy="10.25" r="1.4" fill="currentColor"/>
 <circle cx="16.6" cy="10.25" r="1.4" fill="currentColor"/>
+</svg>`,
+);
+
+// Interlaced: the screen's rows, alternate ones solid and dashed
+const monitorInterlaced = monitor.replace(
+  '</svg>',
+  `<path d="M6 7.75h12M6 12.75h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M6 10.25h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2.5"/>
 </svg>`,
 );
 
@@ -100,9 +111,14 @@ const ICONS = {
   edges,
   monitor,
   monitorSbs,
+  monitorInterlaced,
   phone,
   phoneViewer,
   faces: recolour(diamond),
+  // a dropdown, closed and open, and the chosen option in its list
+  dropdown: recolour(chevronDown),
+  dropdownOpen: recolour(chevronUp),
+  check: recolour(check),
 };
 
 /** An icon as a standalone SVG in a fixed colour, for drawing onto a canvas. */

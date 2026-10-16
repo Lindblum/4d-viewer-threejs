@@ -2,14 +2,14 @@ import * as THREE from 'three';
 
 // Options → Faces: how the polytope's faces are drawn.
 //   Glow: the original look, unlit, faint centres rising to bright rims.
-//   Glass, Diamond, Water, Soap, Metal, Frosted: physically based, lit by the surroundings
+//   Glass, Water, Soap, Metal, Frosted: physically based, lit by the surroundings
 //   (scene.environment, see FaceEnvironment in Scene.jsx), each with the
 //   cell-coloured rim added as a glow so neighbouring cells stay distinct.
 // Faces carry no normals (they move every frame), so the lit looks use flat
 // shading: the normal comes from screen-space derivatives, always toward the viewer.
 
-export const FACE_LOOKS = ['glow', 'glass', 'diamond', 'water', 'soap', 'metal', 'frosted'];
-export const FACE_LOOK_LABELS = { glow: 'Glow', glass: 'Glass', diamond: 'Diamond', water: 'Water', soap: 'Soap', metal: 'Metal', frosted: 'Frosted' };
+export const FACE_LOOKS = ['glow', 'glass', 'water', 'soap', 'metal', 'frosted'];
+export const FACE_LOOK_LABELS = { glow: 'Glow', glass: 'Glass', water: 'Water', soap: 'Soap', metal: 'Metal', frosted: 'Frosted' };
 const WAVE_HEIGHT = 0.03; // in model units: with WAVE_SCALE, sets how steep the ripples are
 const WAVE_SCALE = 4.5; // waves per unit, roughly: several ripples across each face
 const WAVE_SHINE = 0.4; // the light the ripple slopes catch (see addWaves)
@@ -24,8 +24,6 @@ const FILM_STRENGTH = 0.35; // how strongly Soap's rainbow film shows (see addFi
  */
 const LOOKS = {
   glass: { roughness: 0.15, metalness: 0, transmission: 1, ior: 1.45, thickness: 1, specularIntensity: 0.03, alpha: 2.5, alphaFloor: 0, rim: 0.7 },
-  // Glass at diamond's index of refraction, for comparison: the view through bends more
-  diamond: { roughness: 0.15, metalness: 0, transmission: 1, ior: 2.42, thickness: 1, specularIntensity: 0.03, alpha: 2.5, alphaFloor: 0, rim: 0.7 },
   metal: { roughness: 0.12, metalness: 1, specularIntensity: 1, alpha: 3.5, alphaFloor: 0.45, rim: 0.5 },
   // water: rippling (see addWaves), clear and faintly blue, a little sheen on the ripples
   water: {
@@ -65,7 +63,6 @@ const LOOKS = {
 /** Whether `look` refracts (transmission), which costs a second scene render per eye. */
 export const isSeeThrough = (look) => (LOOKS[look]?.transmission ?? 0) > 0;
 
-export const nextFaceLook = (current) => FACE_LOOKS[(FACE_LOOKS.indexOf(current) + 1) % FACE_LOOKS.length];
 
 /**
  * Frosted's coarse random grain: a tangent-space normal map (bends what is

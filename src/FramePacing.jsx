@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { useXR } from '@react-three/xr';
 
-// The see-through face looks (Glass, Diamond, Water, Soap, Frosted) are
+// The see-through face looks (Glass, Water, Soap, Frosted) are
 // costly: three.js draws the scene a second time, per eye, for them to
 // refract. While one is showing:
 //   - that extra render is drawn at half resolution (a quarter of the pixels);

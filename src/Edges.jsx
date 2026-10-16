@@ -20,7 +20,6 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 export const EDGE_LOOKS = ['off', 'glow', 'glass', 'chrome'];
 export const EDGE_LOOK_LABELS = { off: 'Off', glow: 'Glow', glass: 'Glass', chrome: 'Chrome' };
-export const nextEdgeLook = (current) => EDGE_LOOKS[(EDGE_LOOKS.indexOf(current) + 1) % EDGE_LOOKS.length];
 
 const GLOW_COLOR = new THREE.Color(0.75, 0.85, 1);
 const GLOW_WIDTH = 1.15; // the glow tube is this much wider than a metal one, fading out at its sides

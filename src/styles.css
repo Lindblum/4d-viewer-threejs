@@ -97,6 +97,31 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 .menu-btn .label { display: flex; flex: 1; gap: 18px; justify-content: space-between; min-width: 0; white-space: nowrap; line-height: 1.25; }
 .menu-btn .name { flex: none; }
 .menu-btn .value { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+
+/* a dropdown's choices, two to a row beneath its button */
+.menu-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: -4px 0 0 24px;
+}
+.menu-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  text-align: left;
+  font-size: 13.5px;
+}
+.menu-option:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.4); }
+.menu-option.selected { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.45); }
+.menu-option:disabled { opacity: 0.45; cursor: default; }
+.menu-option .option-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .icon { display: inline-flex; flex: none; align-items: center; line-height: 0; }
 .icon svg { display: block; }
 
@@ -104,6 +129,24 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 
 .note.error { color: #ff9b8a; }
 
+
+/* the panel never runs off the screen: its header stays, the buttons scroll */
+.hud {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2 * max(12px, env(safe-area-inset-top)));
+}
+.hud header { flex: none; }
+.hud-body {
+  min-height: 0;
+  margin-right: -10px; /* the scrollbar sits in the panel's padding, not over the buttons */
+  padding-right: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
 
 /* Cardboard stereo view */
 .cardboard { position: fixed; inset: 0; cursor: pointer; }

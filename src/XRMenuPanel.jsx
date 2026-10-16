@@ -7,8 +7,9 @@ import { useGazeTarget } from './Gaze.jsx';
 // The options panel in XR. It draws the same menu model as the windowed
 // panel (title, XR status, "Name: Value" buttons, and the shared
 // open / collapsed state) onto a canvas, since WebXR can't show page
-// elements. Collapsed, it is just the gear button. Controller rays, hand
-// pinches and gaze pick a control from where they hit the texture.
+// elements. Collapsed, it is just the gear button. An open dropdown lists
+// its choices beneath it, two to a row. Controller rays, hand pinches and
+// gaze pick a control from where they hit the texture.
 
 const W = 1000; // canvas px of the reference width...
 const WIDTH_M = 0.44; // ...which is this many metres: sets the text size in XR
@@ -43,6 +44,13 @@ const BUTTON_FONT = `500 34px ${FONT}`;
 const TITLE_FONT = `650 46px ${FONT}`;
 const INSET = 18; // icon from the button's left edge, text from its right
 const VALUE_GAP = 40; // at least this between a setting's name and its value
+const TRAILING = 36; // a dropdown's chevron, at the right edge
+// a dropdown's choices: two to a row beneath its button, indented
+const OPTION_FONT = `400 30px ${FONT}`;
+const OPTION_H = 52;
+const OPTION_GAP = 12;
+const OPTION_INDENT = 54;
+const CHECK = 30;
 
 let measureCtx;
 function textWidth(text, font) {
@@ -58,18 +66,39 @@ function labelWidth(label) {
 }
 
 function panelWidth(title, labels) {
-  const button = INSET + ICON + ICON_GAP + Math.max(0, ...labels.map(labelWidth)) + INSET;
+  const button = INSET + ICON + ICON_GAP + Math.max(0, ...labels.map(labelWidth)) + ICON_GAP + TRAILING + INSET;
   const titleRow = TOGGLE + 24 + textWidth(title, TITLE_FONT);
   return Math.ceil(2 * PAD + Math.max(button, titleRow));
 }
 
-/** Canvas size and the hit rectangles ({ id, x, y, w, h }) for this state. */
-function layout(open, items, lines, panelW) {
+/**
+ * Canvas size and the hit rectangles for this state: { id, x, y, w, h } plus
+ * `item` for a button or `option` for a choice in an open dropdown.
+ * `lists`: false lays it out as if every dropdown were closed.
+ */
+function layout(open, items, lines, panelW, lists = true) {
   if (!open) return { width: GEAR, height: GEAR, rects: [{ id: MENU_TOGGLE, x: 0, y: 0, w: GEAR, h: GEAR }] };
-  const first = TITLE_Y + 34 + lines * LINE_H + 16;
   const rects = [{ id: MENU_TOGGLE, x: PAD, y: TITLE_Y - TOGGLE / 2, w: TOGGLE, h: TOGGLE }];
-  items.forEach((item, i) => rects.push({ id: item.id, item, x: PAD, y: first + i * (BUTTON_H + GAP), w: panelW - 2 * PAD, h: BUTTON_H }));
-  return { width: panelW, height: first + items.length * (BUTTON_H + GAP) - GAP + PAD, rects };
+  const w = panelW - 2 * PAD;
+  let y = TITLE_Y + 34 + lines * LINE_H + 16;
+  for (const item of items) {
+    rects.push({ id: item.id, item, x: PAD, y, w, h: BUTTON_H });
+    y += BUTTON_H + GAP;
+    if (!lists || !item.dropdown?.open) continue;
+    const optionW = (w - OPTION_INDENT - OPTION_GAP) / 2;
+    item.dropdown.options.forEach((option, i) => {
+      rects.push({
+        id: option.id,
+        option,
+        x: PAD + OPTION_INDENT + (i % 2) * (optionW + OPTION_GAP),
+        y: y + Math.floor(i / 2) * (OPTION_H + OPTION_GAP),
+        w: optionW,
+        h: OPTION_H,
+      });
+    });
+    y += Math.ceil(item.dropdown.options.length / 2) * (OPTION_H + OPTION_GAP) + GAP - OPTION_GAP;
+  }
+  return { width: panelW, height: y - GAP + PAD, rects };
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -108,8 +137,9 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
   const lines = status ? 1 : 0;
   const panelW = useMemo(() => panelWidth(title, labels ?? items.map((i) => i.label)), [title, labels, items]);
   const { width, height, rects } = useMemo(() => layout(open, items, lines, panelW), [open, items, lines, panelW]);
-  // the open panel's height: collapsed, the gear keeps to its top-left corner
-  const openHeight = useMemo(() => layout(true, items, lines, panelW).height, [items, lines, panelW]);
+  // the open panel's height with its dropdowns closed: the top edge stays put
+  // as a list opens below, and collapsed, the gear keeps to the top-left corner
+  const openHeight = useMemo(() => layout(true, items, lines, panelW, false).height, [items, lines, panelW]);
 
   const canvas = useMemo(() => {
     const c = document.createElement('canvas');
@@ -180,6 +210,28 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
         ctx.stroke();
         continue;
       }
+      if (r.option) {
+        // a choice in an open dropdown: smaller, the current one lit and ticked
+        const { option } = r;
+        roundRect(ctx, r.x, r.y, r.w, r.h, 14);
+        const hot = option.id === hovered;
+        ctx.fillStyle = hot ? 'rgba(255, 255, 255, 0.24)' : option.selected ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.fill();
+        ctx.strokeStyle = hot || option.selected ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = hot ? 4 : 2;
+        ctx.stroke();
+        ctx.globalAlpha = option.disabled ? 0.4 : 1;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = OPTION_FONT;
+        const room = r.w - 2 * INSET - (option.selected ? CHECK + 10 : 0);
+        centredText(ctx, fit(ctx, option.label, room), r.x + INSET, r.y + r.h / 2);
+        if (option.selected) {
+          const check = iconImage('check', redraw);
+          if (check.complete && check.naturalWidth) ctx.drawImage(check, r.x + r.w - INSET - CHECK, r.y + (r.h - CHECK) / 2, CHECK, CHECK);
+        }
+        ctx.globalAlpha = 1;
+        continue;
+      }
       const { item } = r;
       drawButtonFrame(ctx, r, { hot: item.id === hovered && !item.disabled, disabled: item.disabled });
       ctx.globalAlpha = item.disabled ? 0.4 : 1;
@@ -187,9 +239,14 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
       if (img.complete && img.naturalWidth) ctx.drawImage(img, r.x + INSET, r.y + (r.h - ICON) / 2, ICON, ICON);
       ctx.fillStyle = '#ffffff';
       ctx.font = BUTTON_FONT;
-      // the name on the left, the value against the right edge
+      // the name on the left, the value against the right edge, then a dropdown's chevron
       const tx = r.x + INSET + ICON + ICON_GAP;
-      const right = r.x + r.w - INSET;
+      let right = r.x + r.w - INSET;
+      if (item.dropdown) {
+        const icon = iconImage(item.dropdown.open ? 'dropdownOpen' : 'dropdown', redraw);
+        if (icon.complete && icon.naturalWidth) ctx.drawImage(icon, right - TRAILING, r.y + (r.h - TRAILING) / 2, TRAILING, TRAILING);
+        right -= TRAILING + ICON_GAP;
+      }
       const { name, value } = splitLabel(item.label);
       const nameText = value ? `${name}:` : name;
       centredText(ctx, fit(ctx, nameText, right - tx), tx, r.y + r.h / 2);
@@ -209,7 +266,7 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
     const px = hit.uv.x * width;
     const py = (1 - hit.uv.y) * height;
     const r = rects.find((q) => px >= q.x && px <= q.x + q.w && py >= q.y && py <= q.y + q.h);
-    return r && !r.item?.disabled ? r.id : null;
+    return r && !r.item?.disabled && !r.option?.disabled ? r.id : null;
   };
   useGazeTarget(mesh, onSelect, setGazeKey, pick);
 

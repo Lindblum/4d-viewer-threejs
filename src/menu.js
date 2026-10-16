@@ -1,6 +1,7 @@
 // Options menu model shared by the windowed panel (DOM) and the XR panel
-// (drawn on a canvas): one list of buttons, each "Name: Value", that cycle
-// their setting when pressed.
+// (drawn on a canvas): one list of buttons, each "Name: Value". A dropdown
+// opens a list of choices beneath it (a chevron on its right); the rest
+// toggle when pressed.
 
 import { SHAPES } from './polytopeGeometry.js';
 import { FACE_LOOKS, FACE_LOOK_LABELS } from './faceLooks.js';
@@ -8,50 +9,40 @@ import { EDGE_LOOKS, EDGE_LOOK_LABELS } from './Edges.jsx';
 
 export const MENU_TITLE = '4D Polytope Viewer';
 
-/** Options → Background, in the order the button cycles through them (passthrough last). */
+/** Options → Background, in list order (passthrough last). */
 export const BACKGROUNDS = ['solid', 'skybox', 'passthrough'];
 const BACKGROUND_LABELS = { solid: 'Solid', skybox: 'Skybox', passthrough: 'Passthrough (XR Only)' };
 
 /** The Vite + React starter's page colour, used for the Solid background. */
 export const SOLID_BACKGROUND = '#242424';
 
-/** The next background after `current`, skipping passthrough where the device can't do it. */
-export function nextBackground(current, passthroughAvailable) {
-  const choices = BACKGROUNDS.filter((b) => b !== 'passthrough' || passthroughAvailable);
-  return choices[(choices.indexOf(current) + 1) % choices.length];
-}
-
 /**
- * Options → View, in cycling order. Normal and 3D: SBS are windowed; the rest
- * are XR sessions. Phones get the phone views, headsets the HMD one.
+ * Options → View, in list order. Normal and the 3D views are windowed; the
+ * rest are XR sessions. Phones get the phone views, headsets the HMD one.
  */
-export const VIEWS = ['normal', 'sbs', 'hmd', 'phoneAR', 'phoneViewer'];
+export const VIEWS = ['normal', 'sbs', 'interlaced', 'hmd', 'phoneAR', 'phoneViewer'];
 export const XR_VIEWS = ['hmd', 'phoneAR', 'phoneViewer'];
 const VIEW_LABELS = {
   normal: 'Normal',
   sbs: '3D: SBS',
+  interlaced: '3D: Interlaced',
   hmd: 'XR: HMD Stereo',
   phoneAR: 'XR: Phone AR',
   phoneViewer: 'XR: Phone Viewer',
 };
-const VIEW_ICONS = { normal: 'monitor', sbs: 'monitorSbs', hmd: 'vr', phoneAR: 'phone', phoneViewer: 'phoneViewer' };
+const VIEW_ICONS = { normal: 'monitor', sbs: 'monitorSbs', interlaced: 'monitorInterlaced', hmd: 'vr', phoneAR: 'phone', phoneViewer: 'phoneViewer' };
 
 /**
  * The views this device can show. `env`: { phone, headset, xrSupported }.
- * A headset browser's own window can't show side-by-side usefully, so no SBS there.
+ * A headset browser's own window can't show the 3D views usefully, so not there.
  */
 export function availableViews(env) {
   return VIEWS.filter((view) => {
-    if (view === 'sbs') return !env.headset;
+    if (view === 'sbs' || view === 'interlaced') return !env.headset;
     if (view === 'hmd') return !env.phone && env.xrSupported;
     if (view === 'phoneAR' || view === 'phoneViewer') return env.phone;
     return true;
   });
-}
-
-/** The view after `current` in `available`. */
-export function nextView(current, available) {
-  return available[(available.indexOf(current) + 1) % available.length];
 }
 
 /**
@@ -63,39 +54,93 @@ export function splitLabel(label) {
   return at < 0 ? { name: label, value: '' } : { name: label.slice(0, at), value: label.slice(at + 2) };
 }
 
+export const PICK_PREFIX = 'pick:';
+
 /**
- * Items: { id, label ("Name: Value", see splitLabel), icon, disabled?, title? }.
- * `env`: { passthroughAvailable, views (available), checking }.
+ * A dropdown: the button shows the current choice, and when it is the open
+ * one (`state.dropdown`), lists every choice beneath it. `choices`:
+ * [{ value, label, disabled?, title? }]. Choosing one sends "pick:<id>:<index>".
+ */
+function dropdown(state, id, choices, current) {
+  return {
+    open: state.dropdown === id,
+    options: choices.map((choice, i) => ({ ...choice, id: `${PICK_PREFIX}${id}:${i}`, selected: choice.value === current })),
+  };
+}
+
+/** The dropdown choice a "pick:<id>:<index>" id names, from `items`: { id, value } or null. */
+export function pickedChoice(items, pickId) {
+  const [id, index] = pickId.slice(PICK_PREFIX.length).split(':');
+  const option = items.find((item) => item.id === id)?.dropdown?.options[Number(index)];
+  return option && !option.disabled ? { id, value: option.value } : null;
+}
+
+/**
+ * Items: { id, label ("Name: Value", see splitLabel), icon, disabled?, title?,
+ * dropdown? }. `dropdown`: { open, options: [{ id, label, value, selected,
+ * disabled?, title? }] }, drawn with a chevron at the far right and, when
+ * open, its options beneath. `env`: { passthroughAvailable, views (available), checking }.
  */
 export function menuItems(state, env) {
-  const items = [
-    { id: 'shape', label: `Shape: ${state.shape.name} ${state.shape.schlafli}`, icon: 'shape' },
-    { id: 'faces', label: `Faces: ${FACE_LOOK_LABELS[state.faces]}`, icon: 'faces' },
-    { id: 'edges', label: `Edges: ${EDGE_LOOK_LABELS[state.edges]}`, icon: 'edges' },
-    { id: 'shadow', label: `2D Shadow: ${state.showShadow ? 'On' : 'Off'}`, icon: state.showShadow ? 'on' : 'off' },
-    { id: 'rotate', label: `Rotate: ${state.paused ? 'Off' : 'On'}`, icon: state.paused ? 'pause' : 'rotate' },
+  const xrMissing = !env.views.some((view) => XR_VIEWS.includes(view));
+  return [
+    {
+      id: 'shape',
+      label: `Shape: ${shapeLabel(state.shape)}`,
+      icon: 'shape',
+      dropdown: dropdown(state, 'shape', SHAPES.map((shape, i) => ({ value: i, label: shapeLabel(shape) })), SHAPES.indexOf(state.shape)),
+    },
     {
       id: 'background',
       label: `Background: ${BACKGROUND_LABELS[state.background]}`,
       icon: state.background,
-      title: env.passthroughAvailable ? undefined : 'Passthrough needs an XR headset or a phone camera',
+      dropdown: dropdown(
+        state,
+        'background',
+        BACKGROUNDS.map((b) => {
+          const unavailable = b === 'passthrough' && !env.passthroughAvailable;
+          return {
+            value: b,
+            label: BACKGROUND_LABELS[b],
+            disabled: unavailable,
+            title: unavailable ? 'Passthrough needs an XR headset or a phone camera' : undefined,
+          };
+        }),
+        state.background,
+      ),
     },
+    {
+      id: 'view',
+      label: `View Mode: ${VIEW_LABELS[state.view]}`,
+      icon: VIEW_ICONS[state.view],
+      dropdown: dropdown(state, 'view', env.views.map((view) => ({ value: view, label: VIEW_LABELS[view] })), state.view),
+      // the 3D views need no XR, so the list works while XR support is still being checked
+      disabled: env.views.length < 2,
+      title: xrMissing && !env.checking ? "WebXR isn't available here. Open the page in a headset browser over HTTPS for XR." : undefined,
+    },
+    {
+      id: 'faces',
+      label: `Faces: ${FACE_LOOK_LABELS[state.faces]}`,
+      icon: 'faces',
+      dropdown: dropdown(state, 'faces', FACE_LOOKS.map((look) => ({ value: look, label: FACE_LOOK_LABELS[look] })), state.faces),
+    },
+    {
+      id: 'edges',
+      label: `Edges: ${EDGE_LOOK_LABELS[state.edges]}`,
+      icon: 'edges',
+      dropdown: dropdown(state, 'edges', EDGE_LOOKS.map((look) => ({ value: look, label: EDGE_LOOK_LABELS[look] })), state.edges),
+    },
+    { id: 'shadow', label: `2D Shadow: ${state.showShadow ? 'On' : 'Off'}`, icon: state.showShadow ? 'on' : 'off' },
+    { id: 'rotate', label: `Rotate: ${state.paused ? 'Off' : 'On'}`, icon: state.paused ? 'pause' : 'rotate' },
   ];
-  const xrMissing = !env.views.some((view) => XR_VIEWS.includes(view));
-  items.push({
-    id: 'view',
-    label: `View Mode: ${VIEW_LABELS[state.view]}`,
-    icon: VIEW_ICONS[state.view],
-    // SBS needs no XR, so the button works while XR support is still being checked
-    disabled: env.views.length < 2,
-    title: xrMissing && !env.checking ? "WebXR isn't available here. Open the page in a headset browser over HTTPS for XR." : undefined,
-  });
-  return items;
 }
+
+const shapeLabel = (shape) => `${shape.name} ${shape.schlafli}`;
 
 /**
  * Every label the buttons can show in this environment, so both panels can
  * size themselves to the widest one and not change width as values change.
+ * (The dropdowns' choices sit two to a row in less room, so they don't set it.)
  */
 export function possibleLabels(env) {
   const labels = new Set();

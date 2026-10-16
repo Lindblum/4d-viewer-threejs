@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore, useXRSessionModeSupported } from '@react-three/xr';
 import Scene from './Scene.jsx';
@@ -7,14 +7,13 @@ import { MENU_TOGGLE } from './XRMenuPanel.jsx';
 import { PHONE_AR_SESSION_INIT } from './PhoneStereo.jsx';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
-import { nextFaceLook } from './faceLooks.js';
-import { nextEdgeLook } from './Edges.jsx';
-import { MENU_TITLE, splitLabel, XR_VIEWS, availableViews, menuItems, nextBackground, nextView, possibleLabels } from './menu.js';
+import { MENU_TITLE, PICK_PREFIX, splitLabel, XR_VIEWS, availableViews, menuItems, pickedChoice, possibleLabels } from './menu.js';
 
 // How the display settings work:
 //   Background (Solid / Skybox / Passthrough): what is behind the model. Changes live.
-//   View: cycles through the views this device supports (see menu.js):
-//     Normal and 3D: SBS (half side-by-side, for 3D TVs) are windowed.
+//   View: picks from the views this device supports (see menu.js):
+//     Normal, 3D: SBS (half side-by-side, for 3D TVs) and 3D: Interlaced
+//     (alternate rows, for passive 3D monitors) are windowed.
 //     The XR views start a session, only from a tap, as browsers require.
 //
 // XR: HMD Stereo (headsets) starts an AR session where supported (so every
@@ -63,7 +62,7 @@ const wrap = (i, n) => (i + n) % n;
 function useViewerState() {
   const [shapeIndex, setShapeIndex] = useState(DEFAULT_SHAPE_INDEX);
   const [background, setBackground] = useState('skybox'); // 'solid' | 'skybox' | 'passthrough'
-  const [screenView, setScreenView] = useState('normal'); // outside XR: 'normal' | 'sbs'
+  const [screenView, setScreenView] = useState('normal'); // outside XR: 'normal' | 'sbs' | 'interlaced'
   const [phoneStereo, setPhoneStereo] = useState(true); // phone XR: two lens-corrected eyes
   const [handheld, setHandheld] = useState(false); // the motion-sensor view is showing (phones without AR)
   const [showPolytope, setShowPolytope] = useState(true);
@@ -72,6 +71,7 @@ function useViewerState() {
   const [edges, setEdges] = useState('off'); // see Edges.jsx
   const [paused, setPaused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
+  const [dropdown, setDropdown] = useState(null); // the dropdown whose list is open, likewise
 
   const actions = useMemo(
     () => ({
@@ -84,10 +84,15 @@ function useViewerState() {
       setHandheld,
       togglePolytope: () => setShowPolytope((v) => !v),
       toggleShadow: () => setShowShadow((v) => !v),
-      nextFaces: () => setFaces(nextFaceLook),
-      nextEdges: () => setEdges(nextEdgeLook),
+      setFaces,
+      setEdges,
       togglePause: () => setPaused((v) => !v),
-      toggleMenu: () => setMenuOpen((v) => !v),
+      toggleMenu: () => {
+        setMenuOpen((v) => !v);
+        setDropdown(null);
+      },
+      toggleDropdown: (id) => setDropdown((d) => (d === id ? null : id)),
+      closeDropdown: () => setDropdown(null),
     }),
     [],
   );
@@ -106,6 +111,7 @@ function useViewerState() {
     edges,
     paused,
     menuOpen,
+    dropdown,
   };
   return [state, actions];
 }
@@ -161,10 +167,37 @@ function MenuButtons({ items, labels, onSelect }) {
   return (
     <div className="menu-items">
       {items.map((item) => (
-        <button key={item.id} className="menu-btn" disabled={item.disabled} title={item.title} onClick={() => onSelect(item.id)}>
-          <Icon name={item.icon} />
-          <Label text={item.label} />
-        </button>
+        <Fragment key={item.id}>
+          <button
+            className="menu-btn"
+            disabled={item.disabled}
+            title={item.title}
+            aria-expanded={item.dropdown ? item.dropdown.open : undefined}
+            onClick={() => onSelect(item.id)}
+          >
+            <Icon name={item.icon} />
+            <Label text={item.label} />
+            {item.dropdown && <Icon name={item.dropdown.open ? 'dropdownOpen' : 'dropdown'} />}
+          </button>
+          {item.dropdown?.open && (
+            <div className="menu-options" role="listbox">
+              {item.dropdown.options.map((option) => (
+                <button
+                  key={option.id}
+                  className={`menu-option${option.selected ? ' selected' : ''}`}
+                  role="option"
+                  aria-selected={option.selected}
+                  disabled={option.disabled}
+                  title={option.title}
+                  onClick={() => onSelect(option.id)}
+                >
+                  <span className="option-label">{option.label}</span>
+                  {option.selected && <Icon name="check" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </Fragment>
       ))}
       {/* invisible, zero-height copies of every possible label: they set the panel's width */}
       <div className="menu-sizer" aria-hidden="true">
@@ -172,6 +205,7 @@ function MenuButtons({ items, labels, onSelect }) {
           <div key={label} className="menu-btn">
             <Icon name="shape" />
             <Label text={label} />
+            <Icon name="dropdown" />
           </div>
         ))}
       </div>
@@ -179,9 +213,38 @@ function MenuButtons({ items, labels, onSelect }) {
   );
 }
 
+/**
+ * Calls `onOutside` for a click or tap outside `ref`'s element while
+ * `active`. A drag (orbiting the view) isn't a click, so it leaves the
+ * menu open. The click still reaches what was under it.
+ */
+function useClickOutside(ref, active, onOutside) {
+  const latest = useRef(onOutside);
+  latest.current = onOutside;
+  useEffect(() => {
+    if (!active) return;
+    let down = null;
+    const onDown = (e) => {
+      down = ref.current?.contains(e.target) ? null : { x: e.clientX, y: e.clientY };
+    };
+    const onUp = (e) => {
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6) latest.current();
+      down = null;
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('pointerup', onUp, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('pointerup', onUp, true);
+    };
+  }, [ref, active]);
+}
+
 /** The windowed panel: draws the shared menu model (see XRMenuPanel for XR). */
 function Hud({ menu, error }) {
   const toggle = () => menu.onSelect(MENU_TOGGLE);
+  const panel = useRef(null);
+  useClickOutside(panel, menu.open, toggle);
   if (!menu.open) {
     return (
       <button className="hud-gear" onClick={toggle} aria-label="Show options" title="Options">
@@ -190,7 +253,7 @@ function Hud({ menu, error }) {
     );
   }
   return (
-    <aside className="hud">
+    <aside className="hud" ref={panel}>
       <header>
         <button className="collapse" onClick={toggle} aria-label="Hide options">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
@@ -200,7 +263,7 @@ function Hud({ menu, error }) {
         <h1>{menu.title}</h1>
       </header>
 
-      <div>
+      <div className="hud-body">
         {menu.status && <p className="stats">{menu.status}</p>}
         <MenuButtons items={menu.items} labels={menu.labels} onSelect={menu.onSelect} />
         {error && (
@@ -287,21 +350,32 @@ export default function App() {
         ? `XR: phone AR, tracked, ${state.stereo ? 'stereo' : 'mono'}`
         : `XR: headset ${sessionMode === 'immersive-ar' ? 'AR' : 'VR'}`;
 
+  const items = menuItems(state, { passthroughAvailable, views, checking: !support.checked && !phone });
   const onSelect = (id) => {
-    if (id === MENU_TOGGLE) actions.toggleMenu();
-    else if (id === 'shape') actions.nextShape();
+    if (id.startsWith(PICK_PREFIX)) {
+      // a choice from an open dropdown's list, which then closes
+      const choice = pickedChoice(items, id);
+      if (!choice) return;
+      actions.closeDropdown();
+      choose(choice.id, choice.value);
+    } else if (id === MENU_TOGGLE) actions.toggleMenu();
+    else if (items.find((item) => item.id === id)?.dropdown) actions.toggleDropdown(id);
     else if (id === 'shadow') actions.toggleShadow();
-    else if (id === 'faces') actions.nextFaces();
-    else if (id === 'edges') actions.nextEdges();
     else if (id === 'rotate') actions.togglePause();
-    else if (id === 'background') actions.setBackground(nextBackground(state.background, passthroughAvailable));
-    else if (id === 'view') selectView(nextView(view, views));
+  };
+  const choose = (id, value) => {
+    if (id === 'shape') actions.setShape(value);
+    else if (id === 'faces') actions.setFaces(value);
+    else if (id === 'edges') actions.setEdges(value);
+    else if (id === 'background') actions.setBackground(value);
+    else if (id === 'view') selectView(value);
   };
   const selectView = (next) => {
+    if (next === view) return;
     const toXR = XR_VIEWS.includes(next);
     if (toXR) actions.setPhoneStereo(next === 'phoneViewer');
     if (toXR && !inXR) {
-      // if the session fails to start, the next press carries on from Normal
+      // if the session fails to start, the panel shows Normal
       actions.setScreenView('normal');
       enterXR(next === 'phoneViewer');
     } else if (!toXR) {
@@ -309,14 +383,13 @@ export default function App() {
       actions.setScreenView(next);
     }
   };
-  const checking = !support.checked && !phone;
   const labels = useMemo(() => possibleLabels({ passthroughAvailable, views }), [passthroughAvailable, views]);
   const menu = {
     title: MENU_TITLE,
     labels,
     status,
     open: state.menuOpen,
-    items: menuItems(state, { passthroughAvailable, views, checking }),
+    items,
     onSelect,
   };
 

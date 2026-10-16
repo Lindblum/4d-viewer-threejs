@@ -6,7 +6,7 @@ import * as THREE from 'three';
 // left half, the right on the right, each keeping the full screen's aspect,
 // so it is squeezed to half width. The display stretches each half back.
 
-const EYE_SEPARATION = 0.064; // metres
+export const EYE_SEPARATION = 0.064; // metres
 
 const _size = new THREE.Vector2();
 
