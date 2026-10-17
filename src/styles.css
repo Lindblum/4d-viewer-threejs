@@ -39,23 +39,7 @@ canvas { display: block; touch-action: none; }
 .hud header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .hud h1 { flex: 1; margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0.02em; }
 .hud .collapse { display: grid; place-items: center; width: 30px; height: 28px; padding: 0; }
-.hud-gear {
-  position: fixed;
-  top: max(12px, env(safe-area-inset-top));
-  left: max(12px, env(safe-area-inset-left));
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 12px;
-  background: var(--panel);
-  border-color: var(--border);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  font-size: 18px;
-}
-.hud-gear:hover { background: rgba(40, 46, 66, 0.85); }
+.hud.collapsed header { margin-bottom: 0; }
 
 .stats { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
@@ -98,10 +82,23 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 .menu-btn .name { flex: none; }
 .menu-btn .value { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 
-/* a dropdown's choices, two to a row beneath its button */
+/* a group's settings beneath its button, indented like a dropdown's choices */
+.menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -4px 0 0 24px;
+}
+.menu-sizer.menu-group { margin-top: -10px; }
+.menu-sizer .menu-options { contain: none; }
+.menu-sizer .menu-option { border: 1px solid transparent; }
+
+/* a dropdown's choices, two to a row beneath its button; long ones are cut
+   short rather than widening the panel */
 .menu-options {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  contain: inline-size; /* adds nothing to the panel's max-content width */
   gap: 6px;
   margin: -4px 0 0 24px;
 }

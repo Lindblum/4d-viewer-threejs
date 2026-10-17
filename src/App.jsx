@@ -7,7 +7,7 @@ import { MENU_TOGGLE } from './XRMenuPanel.jsx';
 import { PHONE_AR_SESSION_INIT } from './PhoneStereo.jsx';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
-import { MENU_TITLE, PICK_PREFIX, splitLabel, XR_VIEWS, availableViews, menuItems, pickedChoice, possibleLabels } from './menu.js';
+import { MENU_TITLE, PICK_PREFIX, splitLabel, XR_VIEWS, availableViews, menuItems, pickedChoice, possibleLabels, settingItems } from './menu.js';
 
 // How the display settings work:
 //   Background (Solid / Skybox / Passthrough): what is behind the model. Changes live.
@@ -71,6 +71,7 @@ function useViewerState() {
   const [edges, setEdges] = useState('off'); // see Edges.jsx
   const [paused, setPaused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
+  const [group, setGroup] = useState(null); // the group (Model / Video) whose settings are open, likewise
   const [dropdown, setDropdown] = useState(null); // the dropdown whose list is open, likewise
 
   const actions = useMemo(
@@ -89,6 +90,11 @@ function useViewerState() {
       togglePause: () => setPaused((v) => !v),
       toggleMenu: () => {
         setMenuOpen((v) => !v);
+        setGroup(null);
+        setDropdown(null);
+      },
+      toggleGroup: (id) => {
+        setGroup((g) => (g === id ? null : id));
         setDropdown(null);
       },
       toggleDropdown: (id) => setDropdown((d) => (d === id ? null : id)),
@@ -111,6 +117,7 @@ function useViewerState() {
     edges,
     paused,
     menuOpen,
+    group,
     dropdown,
   };
   return [state, actions];
@@ -166,41 +173,10 @@ function Label({ text }) {
 function MenuButtons({ items, labels, onSelect }) {
   return (
     <div className="menu-items">
-      {items.map((item) => (
-        <Fragment key={item.id}>
-          <button
-            className="menu-btn"
-            disabled={item.disabled}
-            title={item.title}
-            aria-expanded={item.dropdown ? item.dropdown.open : undefined}
-            onClick={() => onSelect(item.id)}
-          >
-            <Icon name={item.icon} />
-            <Label text={item.label} />
-            {item.dropdown && <Icon name={item.dropdown.open ? 'dropdownOpen' : 'dropdown'} />}
-          </button>
-          {item.dropdown?.open && (
-            <div className="menu-options" role="listbox">
-              {item.dropdown.options.map((option) => (
-                <button
-                  key={option.id}
-                  className={`menu-option${option.selected ? ' selected' : ''}`}
-                  role="option"
-                  aria-selected={option.selected}
-                  disabled={option.disabled}
-                  title={option.title}
-                  onClick={() => onSelect(option.id)}
-                >
-                  <span className="option-label">{option.label}</span>
-                  {option.selected && <Icon name="check" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </Fragment>
-      ))}
-      {/* invisible, zero-height copies of every possible label: they set the panel's width */}
-      <div className="menu-sizer" aria-hidden="true">
+      <MenuList items={items} onSelect={onSelect} />
+      {/* invisible, zero-height copies of every possible label and dropdown
+          choice, indented like the settings in a group: they set the panel's width */}
+      <div className="menu-sizer menu-group" aria-hidden="true">
         {labels.map((label) => (
           <div key={label} className="menu-btn">
             <Icon name="shape" />
@@ -208,9 +184,66 @@ function MenuButtons({ items, labels, onSelect }) {
             <Icon name="dropdown" />
           </div>
         ))}
+        <div className="menu-options">
+          {settingItems(items).flatMap((item) =>
+            (item.dropdown?.options ?? []).map((option) => (
+              <div key={option.id} className="menu-option">
+                {option.icon && <Icon name={option.icon} />}
+                <span className="option-label">{option.label}</span>
+                <Icon name="check" />
+              </div>
+            )),
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+/** Buttons, each followed when open by its group's settings or its dropdown's choices. */
+function MenuList({ items, onSelect }) {
+  return items.map((item) => {
+    const open = (item.group ?? item.dropdown)?.open;
+    return (
+      <Fragment key={item.id}>
+        <button
+          className="menu-btn"
+          disabled={item.disabled}
+          title={item.title}
+          aria-expanded={item.group || item.dropdown ? open : undefined}
+          onClick={() => onSelect(item.id)}
+        >
+          <Icon name={item.icon} />
+          <Label text={item.label} />
+          {(item.group || item.dropdown) && <Icon name={open ? 'dropdownOpen' : 'dropdown'} />}
+        </button>
+        {item.group?.open && (
+          <div className="menu-group">
+            <MenuList items={item.group.items} onSelect={onSelect} />
+          </div>
+        )}
+        {item.dropdown?.open && (
+          <div className="menu-options" role="listbox">
+            {item.dropdown.options.map((option) => (
+              <button
+                key={option.id}
+                className={`menu-option${option.selected ? ' selected' : ''}`}
+                role="option"
+                aria-selected={option.selected}
+                disabled={option.disabled}
+                title={option.title}
+                onClick={() => onSelect(option.id)}
+              >
+                {option.icon && <Icon name={option.icon} />}
+                <span className="option-label">{option.label}</span>
+                {option.selected && <Icon name="check" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </Fragment>
+    );
+  });
 }
 
 /**
@@ -245,20 +278,23 @@ function Hud({ menu, error }) {
   const toggle = () => menu.onSelect(MENU_TOGGLE);
   const panel = useRef(null);
   useClickOutside(panel, menu.open, toggle);
+  // collapsed, the panel keeps only its gear button, which stays where it was
   if (!menu.open) {
     return (
-      <button className="hud-gear" onClick={toggle} aria-label="Show options" title="Options">
-        <Icon name="gear" />
-      </button>
+      <aside className="hud collapsed">
+        <header>
+          <button className="collapse" onClick={toggle} aria-label="Show options" aria-expanded="false" title="Options">
+            <Icon name="gear" />
+          </button>
+        </header>
+      </aside>
     );
   }
   return (
     <aside className="hud" ref={panel}>
       <header>
-        <button className="collapse" onClick={toggle} aria-label="Hide options">
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-            <path d="M3 9l4-4 4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+        <button className="collapse" onClick={toggle} aria-label="Hide options" aria-expanded="true" title="Options">
+          <Icon name="gear" />
         </button>
         <h1>{menu.title}</h1>
       </header>
@@ -350,7 +386,7 @@ export default function App() {
         ? `XR: phone AR, tracked, ${state.stereo ? 'stereo' : 'mono'}`
         : `XR: headset ${sessionMode === 'immersive-ar' ? 'AR' : 'VR'}`;
 
-  const items = menuItems(state, { passthroughAvailable, views, checking: !support.checked && !phone });
+  const items = menuItems(state, { passthroughAvailable, views, phone, checking: !support.checked && !phone });
   const onSelect = (id) => {
     if (id.startsWith(PICK_PREFIX)) {
       // a choice from an open dropdown's list, which then closes
@@ -359,7 +395,8 @@ export default function App() {
       actions.closeDropdown();
       choose(choice.id, choice.value);
     } else if (id === MENU_TOGGLE) actions.toggleMenu();
-    else if (items.find((item) => item.id === id)?.dropdown) actions.toggleDropdown(id);
+    else if (items.find((item) => item.id === id)?.group) actions.toggleGroup(id);
+    else if (settingItems(items).find((item) => item.id === id)?.dropdown) actions.toggleDropdown(id);
     else if (id === 'shadow') actions.toggleShadow();
     else if (id === 'rotate') actions.togglePause();
   };

@@ -50,6 +50,13 @@ const monitor = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="n
 <path d="M12 16.25v3.5M8.5 19.75h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 </svg>`;
 
+// Video: the screen with a play arrow in it
+const video = monitor.replace(
+  '</svg>',
+  `<path d="M10.25 7.6v5.3l4.4-2.65-4.4-2.65Z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+</svg>`,
+);
+
 const monitorSbs = monitor.replace(
   '</svg>',
   `<path d="M12 6v8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -110,6 +117,7 @@ const ICONS = {
   shape: cube,
   edges,
   monitor,
+  video,
   monitorSbs,
   monitorInterlaced,
   phone,
