@@ -1,10 +1,11 @@
 import { Fragment, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore, useXRSessionModeSupported } from '@react-three/xr';
 import Scene from './Scene.jsx';
 import Icon from './Icon.jsx';
 import { MENU_TOGGLE } from './XRMenuPanel.jsx';
-import { PHONE_AR_SESSION_INIT } from './PhoneStereo.jsx';
+import { phoneARSessionInit } from './PhoneStereo.jsx';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
 import { MENU_TITLE, PICK_PREFIX, splitLabel, XR_VIEWS, availableViews, menuItems, pickedChoice, possibleLabels, settingItems } from './menu.js';
@@ -33,9 +34,12 @@ const xrOptions = {
 };
 const store = createXRStore(xrOptions);
 
-/** The phone AR session: the library's defaults plus raw camera access, for passthrough in stereo. */
+/**
+ * The phone AR session: the library's defaults plus raw camera access, for
+ * passthrough in stereo, and the store's DOM overlay, for the menu in Phone AR.
+ */
 function enterPhoneAR() {
-  xrOptions.customSessionInit = PHONE_AR_SESSION_INIT;
+  xrOptions.customSessionInit = phoneARSessionInit(store.getState().domOverlayRoot);
   try {
     return store.enterAR(); // session options are built synchronously here
   } finally {
@@ -156,6 +160,8 @@ function useXRSupport() {
 
 const getSessionActive = () => store.getState().session != null;
 const getSessionMode = () => store.getState().mode ?? null;
+// the browser granted the session's DOM overlay (some don't)
+const getDomOverlay = () => store.getState().session?.domOverlayState != null;
 
 const describe = (e) => `${e?.name ?? 'Error'}${e?.message ? ` - ${e.message}` : ''}`;
 
@@ -273,6 +279,23 @@ function useClickOutside(ref, active, onOutside) {
   }, [ref, active]);
 }
 
+/**
+ * Page elements shown over a phone's AR session, in the store's DOM overlay
+ * (the rest of the page is hidden while it runs). A tap on them stays with
+ * them: it doesn't also select in the scene.
+ */
+function XROverlay({ children }) {
+  const wrapper = useRef(null);
+  useEffect(() => {
+    const el = wrapper.current;
+    const keep = (e) => e.preventDefault();
+    el?.addEventListener('beforexrselect', keep);
+    return () => el?.removeEventListener('beforexrselect', keep);
+  }, []);
+  const root = store.getState().domOverlayRoot;
+  return root ? createPortal(<div ref={wrapper}>{children}</div>, root) : null;
+}
+
 /** The windowed panel: draws the shared menu model (see XRMenuPanel for XR). */
 function Hud({ menu, error }) {
   const toggle = () => menu.onSelect(MENU_TOGGLE);
@@ -322,6 +345,7 @@ export default function App() {
   const headset = useMemo(isHeadsetBrowser, []);
   const sessionActive = useSyncExternalStore(store.subscribe, getSessionActive);
   const sessionMode = useSyncExternalStore(store.subscribe, getSessionMode);
+  const domOverlay = useSyncExternalStore(store.subscribe, getDomOverlay);
   const inXR = sessionActive || viewerState.handheld;
   const xrSupported = Boolean(support.vr || support.ar);
   const views = useMemo(() => availableViews({ phone, headset, xrSupported }), [phone, headset, xrSupported]);
@@ -329,6 +353,10 @@ export default function App() {
   const view = inXR ? (phone ? (viewerState.stereo ? 'phoneViewer' : 'phoneAR') : 'hmd') : viewerState.screenView;
   const state = { ...viewerState, view };
   const passthroughAvailable = Boolean(support.ar) || phone;
+  // Phone AR's single view shows the windowed panel over the scene rather than
+  // a panel in it: the motion-sensor view is the page itself, an AR session
+  // needs its DOM overlay
+  const menuOverlay = phone && inXR && !viewerState.stereo && (viewerState.handheld || domOverlay);
   const [error, setError] = useState(null);
 
   // into an XR view, straight from the tap
@@ -435,12 +463,21 @@ export default function App() {
       <Canvas flat dpr={[1, 2]} camera={{ position: [0, 1.9, 1.2], fov: 60, near: 0.05, far: 1000 }}>
         <XR store={store}>
           <Suspense fallback={null}>
-            <Scene poly={poly} state={state} actions={actions} menu={menu} phone={phone} />
+            <Scene poly={poly} state={state} actions={actions} menu={menu} menuOverlay={menuOverlay} phone={phone} />
           </Suspense>
         </XR>
       </Canvas>
       {state.handheld ? (
-        <CardboardOverlay split={state.stereo} onTap={actions.nextShape} onExit={exitXR} />
+        <>
+          <CardboardOverlay split={state.stereo} onTap={actions.nextShape} onExit={exitXR} />
+          {menuOverlay && <Hud menu={menu} error={error} />}
+        </>
+      ) : sessionActive ? (
+        menuOverlay && (
+          <XROverlay>
+            <Hud menu={menu} error={error} />
+          </XROverlay>
+        )
       ) : (
         <Hud menu={menu} error={error} />
       )}

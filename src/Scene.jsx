@@ -279,7 +279,8 @@ function Player({ model, menu, poly, children }) {
   return <XROrigin ref={origin}>{children}</XROrigin>;
 }
 
-export default function Scene({ poly, state, actions, menu, phone }) {
+/** `menuOverlay`: the page shows the menu over the scene (Phone AR), so no panel in it. */
+export default function Scene({ poly, state, actions, menu, menuOverlay, phone }) {
   const inSession = useXR((s) => s.mode === 'immersive-vr' || s.mode === 'immersive-ar');
   const inAR = useXR((s) => s.mode === 'immersive-ar');
   // a phone's AR session drawn as two lens-corrected eyes
@@ -343,7 +344,7 @@ export default function Scene({ poly, state, actions, menu, phone }) {
         ))}
       <PolytopeView {...polytopeProps} />
       <Player model={model} menu={menuPanel} poly={poly}>
-        {immersive && (
+        {immersive && !menuOverlay && (
           <XRMenuPanel
             {...menu}
             groupRef={menuPanel}

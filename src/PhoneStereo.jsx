@@ -40,11 +40,18 @@ function updateLayout(gl, framebufferWidth, framebufferHeight) {
   layout.height = portrait ? framebufferWidth : framebufferHeight;
 }
 
-/** The phone AR session's options: the library's defaults plus raw camera access, for passthrough in stereo. */
-export const PHONE_AR_SESSION_INIT = {
-  requiredFeatures: ['local-floor'],
-  optionalFeatures: ['camera-access', 'anchors', 'hit-test', 'plane-detection', 'mesh-detection', 'hand-tracking'],
-};
+/**
+ * The phone AR session's options: the library's defaults plus raw camera
+ * access, for passthrough in stereo, and a DOM overlay on `overlayRoot`, so
+ * the single view (Phone AR) shows the page's own menu over the scene.
+ */
+export function phoneARSessionInit(overlayRoot) {
+  return {
+    requiredFeatures: ['local-floor'],
+    optionalFeatures: ['camera-access', 'dom-overlay', 'anchors', 'hit-test', 'plane-detection', 'mesh-detection', 'hand-tracking'],
+    domOverlay: { root: overlayRoot },
+  };
+}
 
 export function PhoneStereoXR() {
   const gl = useThree((s) => s.gl);
