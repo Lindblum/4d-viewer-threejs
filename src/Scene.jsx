@@ -224,6 +224,7 @@ function PolytopeView({ model, poly, look, edges, speed, visible, showShadow, in
           opacity={poly.faceOpacity}
           onClick={(e) => {
             e.stopPropagation();
+            if (e.delta >= 6) return; // released after orbiting the view: a drag, not a click
             onSelect();
           }}
           onPointerOver={(e) => {
