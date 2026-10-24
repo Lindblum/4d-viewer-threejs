@@ -24,7 +24,8 @@ canvas { display: block; touch-action: none; }
   position: fixed;
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
-  width: max-content; /* as wide as the widest possible button (see .menu-sizer) */
+  /* as wide as the widest possible button (see .menu-sizer), or as dragged */
+  width: var(--hud-width, max-content);
   max-width: calc(100vw - 24px);
   padding: 14px 16px;
   background: var(--panel);
@@ -40,6 +41,12 @@ canvas { display: block; touch-action: none; }
 .hud h1 { flex: 1; margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0.02em; }
 .hud .collapse { display: grid; place-items: center; width: 30px; height: 28px; padding: 0; }
 .hud.collapsed header { margin-bottom: 0; }
+
+/* 3D: SBS: a copy of the panel per eye, each squeezed into its half of the screen */
+.sbs-eyes { position: fixed; inset: 0; pointer-events: none; }
+.sbs-eye { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(0.5); transform-origin: 0 0; }
+.sbs-eye + .sbs-eye { left: 50%; }
+.sbs-eye > * { pointer-events: auto; }
 
 .stats { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
@@ -131,7 +138,26 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 .hud {
   display: flex;
   flex-direction: column;
-  max-height: calc(100dvh - 2 * max(12px, env(safe-area-inset-top)));
+  max-height: min(var(--hud-height, 100dvh), calc(100dvh - 2 * max(12px, env(safe-area-inset-top))));
+}
+
+/* the bottom-right corner, dragged to resize: three diagonal grip lines */
+.hud-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 45%, rgba(255, 255, 255, 0.35) 45% 52%,
+    transparent 52% 64%, rgba(255, 255, 255, 0.35) 64% 71%,
+    transparent 71% 83%, rgba(255, 255, 255, 0.35) 83% 90%,
+    transparent 90%
+  );
+  border-bottom-right-radius: 12px;
 }
 .hud header { flex: none; }
 .hud-body {

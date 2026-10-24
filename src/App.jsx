@@ -62,6 +62,8 @@ function isHeadsetBrowser() {
 }
 
 const wrap = (i, n) => (i + n) % n;
+// `list` with `id` added, or taken out if it was there
+const toggleIn = (id) => (list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
 function useViewerState() {
   const [shapeIndex, setShapeIndex] = useState(DEFAULT_SHAPE_INDEX);
@@ -75,8 +77,8 @@ function useViewerState() {
   const [edges, setEdges] = useState('off'); // see Edges.jsx
   const [paused, setPaused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
-  const [group, setGroup] = useState(null); // the group (Model / Video) whose settings are open, likewise
-  const [dropdown, setDropdown] = useState(null); // the dropdown whose list is open, likewise
+  const [groups, setGroups] = useState([]); // the groups (Model / Video) whose settings are open, likewise
+  const [dropdowns, setDropdowns] = useState([]); // the dropdowns whose lists are open, likewise
 
   const actions = useMemo(
     () => ({
@@ -94,15 +96,13 @@ function useViewerState() {
       togglePause: () => setPaused((v) => !v),
       toggleMenu: () => {
         setMenuOpen((v) => !v);
-        setGroup(null);
-        setDropdown(null);
+        setGroups([]);
+        setDropdowns([]);
       },
-      toggleGroup: (id) => {
-        setGroup((g) => (g === id ? null : id));
-        setDropdown(null);
-      },
-      toggleDropdown: (id) => setDropdown((d) => (d === id ? null : id)),
-      closeDropdown: () => setDropdown(null),
+      // each opens and closes on its own, leaving the others as they are
+      toggleGroup: (id) => setGroups(toggleIn(id)),
+      toggleDropdown: (id) => setDropdowns(toggleIn(id)),
+      closeDropdown: (id) => setDropdowns((list) => list.filter((x) => x !== id)),
     }),
     [],
   );
@@ -121,8 +121,8 @@ function useViewerState() {
     edges,
     paused,
     menuOpen,
-    group,
-    dropdown,
+    groups,
+    dropdowns,
   };
   return [state, actions];
 }
@@ -296,11 +296,67 @@ function XROverlay({ children }) {
   return root ? createPortal(<div ref={wrapper}>{children}</div>, root) : null;
 }
 
-/** The windowed panel: draws the shared menu model (see XRMenuPanel for XR). */
-function Hud({ menu, error }) {
-  const toggle = () => menu.onSelect(MENU_TOGGLE);
+/**
+ * The windowed panel: draws the shared menu model (see XRMenuPanel for XR).
+ * In 3D: SBS each eye gets its own copy, squeezed into its half like the
+ * scene, so the display stretches both back into one panel at screen depth.
+ * 3D: Interlaced needs nothing: a flat panel already lies on both eyes' rows.
+ * `resizable`: a handle at the bottom-right corner sets its width and the
+ * height it may grow to (double-click it to fit the buttons again).
+ */
+function Hud({ menu, error, sbs, resizable }) {
   const panel = useRef(null);
-  useClickOutside(panel, menu.open, toggle);
+  const [size, setSize] = useState(null); // { width, height } dragged to, in px
+  useClickOutside(panel, menu.open, () => menu.onSelect(MENU_TOGGLE));
+  const panelProps = { menu, error, size: resizable ? size : null, onResize: resizable ? setSize : null };
+  if (!sbs) return <HudPanel {...panelProps} panelRef={panel} />;
+  return (
+    // one element around both copies: a click in either is inside the menu
+    <div className="sbs-eyes" ref={panel}>
+      {[0, 1].map((eye) => (
+        <div key={eye} className="sbs-eye" aria-hidden={eye === 1 || undefined}>
+          <HudPanel {...panelProps} stretch={2} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const HUD_MIN_WIDTH = 200;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const HUD_MIN_HEIGHT = 120;
+
+/**
+ * The bottom-right corner: dragging it resizes the panel. `stretch`: screen
+ * px per panel px across, 2 for a copy squeezed into half the screen.
+ */
+function ResizeHandle({ stretch = 1, onResize }) {
+  const onPointerDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    const hud = handle.closest('.hud');
+    const start = { x: e.clientX, y: e.clientY, width: hud.offsetWidth, height: hud.offsetHeight };
+    handle.setPointerCapture(e.pointerId);
+    const onMove = (m) =>
+      onResize({
+        width: clamp(start.width + (m.clientX - start.x) * stretch, HUD_MIN_WIDTH, window.innerWidth - 24),
+        height: clamp(start.height + m.clientY - start.y, HUD_MIN_HEIGHT, window.innerHeight - 24),
+      });
+    const onEnd = () => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onEnd);
+      handle.removeEventListener('pointercancel', onEnd);
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onEnd);
+    handle.addEventListener('pointercancel', onEnd);
+  };
+  return <div className="hud-resize" onPointerDown={onPointerDown} onDoubleClick={() => onResize(null)} title="Resize (double-click to fit)" />;
+}
+
+function HudPanel({ menu, error, panelRef, size, onResize, stretch }) {
+  const toggle = () => menu.onSelect(MENU_TOGGLE);
   // collapsed, the panel keeps only its gear button, which stays where it was
   if (!menu.open) {
     return (
@@ -314,7 +370,7 @@ function Hud({ menu, error }) {
     );
   }
   return (
-    <aside className="hud" ref={panel}>
+    <aside className="hud" ref={panelRef} style={size ? { '--hud-width': `${size.width}px`, '--hud-height': `${size.height}px` } : undefined}>
       <header>
         <button className="collapse" onClick={toggle} aria-label="Hide options" aria-expanded="true" title="Options">
           <Icon name="gear" />
@@ -331,6 +387,7 @@ function Hud({ menu, error }) {
           </p>
         )}
       </div>
+      {onResize && <ResizeHandle stretch={stretch} onResize={onResize} />}
     </aside>
   );
 }
@@ -420,7 +477,7 @@ export default function App() {
       // a choice from an open dropdown's list, which then closes
       const choice = pickedChoice(items, id);
       if (!choice) return;
-      actions.closeDropdown();
+      actions.closeDropdown(choice.id);
       choose(choice.id, choice.value);
     } else if (id === MENU_TOGGLE) actions.toggleMenu();
     else if (items.find((item) => item.id === id)?.group) actions.toggleGroup(id);
@@ -479,7 +536,7 @@ export default function App() {
           </XROverlay>
         )
       ) : (
-        <Hud menu={menu} error={error} />
+        <Hud menu={menu} error={error} sbs={state.view === 'sbs'} resizable />
       )}
     </>
   );

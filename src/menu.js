@@ -57,13 +57,13 @@ export function splitLabel(label) {
 export const PICK_PREFIX = 'pick:';
 
 /**
- * A dropdown: the button shows the current choice, and when it is the open
- * one (`state.dropdown`), lists every choice beneath it. `choices`:
+ * A dropdown: the button shows the current choice, and when it is open
+ * (in `state.dropdowns`), lists every choice beneath it. `choices`:
  * [{ value, label, icon?, disabled?, title? }]. Choosing one sends "pick:<id>:<index>".
  */
 function dropdown(state, id, choices, current) {
   return {
-    open: state.dropdown === id,
+    open: state.dropdowns.includes(id),
     options: choices.map((choice, i) => ({ ...choice, id: `${PICK_PREFIX}${id}:${i}`, selected: choice.value === current })),
   };
 }
@@ -82,7 +82,7 @@ export function pickedChoice(items, pickId) {
 
 /**
  * Items: the groups Model and Video, { id, label, icon, group: { open, items } },
- * which, when open (`state.group`), list their settings beneath, indented like
+ * which, when open (in `state.groups`), list their settings beneath, indented like
  * a dropdown's choices. Settings: { id, label ("Name: Value", see splitLabel),
  * icon, disabled?, title?, dropdown? }. `dropdown`: { open, options: [{ id,
  * label, value, selected, icon?, disabled?, title? }] }, drawn with a chevron at the
@@ -95,7 +95,7 @@ export function menuItems(state, env) {
     id,
     label,
     icon,
-    group: { open: state.group === id, items: ids.map((setting) => settings[setting]) },
+    group: { open: state.groups.includes(id), items: ids.map((setting) => settings[setting]) },
   });
   return [
     group('model', 'Model', 'shape', ['shape', 'faces', 'edges', 'shadow', 'rotate']),
@@ -194,7 +194,7 @@ export function possibleLabels(env) {
     for (const flag of [false, true])
       for (const background of backgrounds)
         for (const view of env.views)
-          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off' }, env)))
+          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [] }, env)))
             labels.add(item.label);
   for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
   for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
