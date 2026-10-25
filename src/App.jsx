@@ -520,7 +520,7 @@ export default function App() {
       <Canvas flat dpr={[1, 2]} camera={{ position: [0, 1.9, 1.2], fov: 60, near: 0.05, far: 1000 }}>
         <XR store={store}>
           <Suspense fallback={null}>
-            <Scene poly={poly} state={state} actions={actions} menu={menu} menuOverlay={menuOverlay} phone={phone} />
+            <Scene poly={poly} state={state} actions={actions} menu={menu} menuOverlay={menuOverlay} phone={phone} onExitXR={exitXR} />
           </Suspense>
         </XR>
       </Canvas>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { XRSpace, useXRInputSourceState } from '@react-three/xr';
 import { iconSvg } from './Icon.jsx';
 import { settingItems, splitLabel } from './menu.js';
 import { useGazeTarget } from './Gaze.jsx';
@@ -455,5 +456,73 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
         <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
       </mesh>
     </group>
+  );
+}
+
+// The View panel: one button, the monitor, back to the Normal view (out of
+// XR), standing on the left controller like grid-game-threejs's. Drawn like
+// the collapsed options panel, at half its size.
+const VIEW_PANEL_PX = 2 * PAD + TOGGLE;
+const VIEW_PANEL_M = VIEW_PANEL_PX * PX_M * 0.5;
+// in the controller's pointing frame (-Z forward, +Y up): standing on this
+// point, its face tipped up toward the eyes
+const DOCK_ANCHOR = [0, 0.05, 0.02];
+const DOCK_TILT = -0.5; // radians about the controller's X: the top leans forward
+
+export function XRViewPanel({ onExit }) {
+  const left = useXRInputSourceState('controller', 'left');
+  const [hot, setHot] = useState(false);
+  const [iconsLoaded, setIconsLoaded] = useState(0);
+  const canvas = useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = VIEW_PANEL_PX;
+    return c;
+  }, []);
+  const texture = useMemo(() => {
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  }, [canvas]);
+  useEffect(() => () => texture.dispose(), [texture]);
+
+  useEffect(() => {
+    const ctx = canvas.getContext('2d');
+    const size = VIEW_PANEL_PX;
+    ctx.clearRect(0, 0, size, size);
+    roundRect(ctx, 4, 4, size - 8, size - 8, 40);
+    ctx.fillStyle = 'rgba(12, 16, 28, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    const button = { x: PAD, y: PAD, w: TOGGLE, h: TOGGLE };
+    drawButtonFrame(ctx, button, { hot });
+    const icon = iconImage('monitor', () => setIconsLoaded((n) => n + 1));
+    if (icon.complete && icon.naturalWidth) ctx.drawImage(icon, PAD + (TOGGLE - GEAR_ICON) / 2, PAD + (TOGGLE - GEAR_ICON) / 2, GEAR_ICON, GEAR_ICON);
+    texture.needsUpdate = true;
+  }, [canvas, texture, hot, iconsLoaded]);
+
+  useEffect(() => {
+    if (!left) setHot(false);
+  }, [left]);
+  if (!left) return null;
+  return (
+    <XRSpace space={left.inputSource.targetRaySpace}>
+      <group position={DOCK_ANCHOR} rotation={[DOCK_TILT, 0, 0]}>
+        <mesh
+          position={[0, VIEW_PANEL_M / 2, 0]}
+          onPointerOver={() => setHot(true)}
+          onPointerOut={() => setHot(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onExit();
+          }}
+        >
+          <planeGeometry args={[VIEW_PANEL_M, VIEW_PANEL_M]} />
+          <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
+        </mesh>
+      </group>
+    </XRSpace>
   );
 }

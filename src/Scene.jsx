@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { CameraBackground, CardboardRig } from './Cardboard.jsx';
 import { GazeReticle } from './Gaze.jsx';
-import { XRMenuPanel } from './XRMenuPanel.jsx';
+import { XRMenuPanel, XRViewPanel } from './XRMenuPanel.jsx';
 import { useControllerGrips } from './Grab.jsx';
 import { SOLID_BACKGROUND } from './menu.js';
 import { advanceWaves, createFaceMaterial, isSeeThrough } from './faceLooks.js';
@@ -280,8 +280,11 @@ function Player({ model, menu, poly, children }) {
   return <XROrigin ref={origin}>{children}</XROrigin>;
 }
 
-/** `menuOverlay`: the page shows the menu over the scene (Phone AR), so no panel in it. */
-export default function Scene({ poly, state, actions, menu, menuOverlay, phone }) {
+/**
+ * `menuOverlay`: the page shows the menu over the scene (Phone AR), so no panel in it.
+ * `onExitXR`: the View panel on a headset's left controller, back to the Normal view.
+ */
+export default function Scene({ poly, state, actions, menu, menuOverlay, phone, onExitXR }) {
   const inSession = useXR((s) => s.mode === 'immersive-vr' || s.mode === 'immersive-ar');
   const inAR = useXR((s) => s.mode === 'immersive-ar');
   // a phone's AR session drawn as two lens-corrected eyes
@@ -354,6 +357,7 @@ export default function Scene({ poly, state, actions, menu, menuOverlay, phone }
             scale={phone && state.stereo ? PHONE_STEREO_MENU_SCALE : 1}
           />
         )}
+        {inSession && !phone && <XRViewPanel onExit={onExitXR} />}
       </Player>
       {immersive && !hasControllers && <GazeReticle />}
       {state.handheld ? (
