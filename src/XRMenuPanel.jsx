@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { iconSvg } from './Icon.jsx';
 import { parseSlide, settingItems, slideEndId, slideId, snapToSlider, splitLabel } from './menu.js';
@@ -179,19 +180,23 @@ function drawButtonFrame(ctx, r, { hot, disabled }) {
   ctx.stroke();
 }
 
-// Every panel is a slab 1 cm thick (as in grid-game-threejs) behind its
-// face, its outline the face's rounded frame, slightly see-through. The face
+// Every panel is a slab 1 cm thick in the world (as in grid-game-threejs),
+// whatever the panel's scale (docked, held, Text Size), behind its face, its outline the face's rounded frame, slightly see-through. The face
 // shows from the front only; from behind, the slab's back. Unlit, so its
 // sides are drawn lighter than its back to show the thickness.
 const SLAB_DEPTH_M = 0.01;
+const SLAB_GAP_M = 0.0005; // between the face and the slab's front, so they don't z-fight
 const FRAME_RADIUS = 40; // canvas px: the frame's rounding (see the panels' draw)
 const SLAB_MATERIALS = [
   new THREE.MeshBasicMaterial({ color: 0x1c2230, transparent: true, opacity: 0.8, depthWrite: false }), // front and back
   new THREE.MeshBasicMaterial({ color: 0x5a6782, transparent: true, opacity: 0.9, depthWrite: false }), // the sides
 ];
 
-/** The slab behind a panel face `w` x `h` (m) centred on its parent, from SLAB_DEPTH_M behind to just behind the face. */
+const _worldScale = new THREE.Vector3();
+
+/** The slab behind a panel face `w` x `h` (m) centred on its parent, from SLAB_DEPTH_M behind to just behind the face, in the world. */
 function PanelSlab({ w, h }) {
+  const slab = useRef(null);
   const geometry = useMemo(() => {
     const r = Math.min(FRAME_RADIUS * PX_M, w / 2, h / 2);
     const [x0, y0, x1, y1] = [-w / 2, -h / 2, w / 2, h / 2];
@@ -205,11 +210,19 @@ function PanelSlab({ w, h }) {
     shape.absarc(x0 + r, y1 - r, r, Math.PI / 2, Math.PI);
     shape.lineTo(x0, y0 + r);
     shape.absarc(x0 + r, y0 + r, r, Math.PI, Math.PI * 1.5);
-    return new THREE.ExtrudeGeometry(shape, { depth: SLAB_DEPTH_M - 0.0005, bevelEnabled: false, curveSegments: 6 });
+    // a unit deep, from z = -1 to 0: scaled to its depth in the world each frame
+    return new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false, curveSegments: 6 }).translate(0, 0, -1);
   }, [w, h]);
   useEffect(() => () => geometry.dispose(), [geometry]);
+  useFrame(() => {
+    const m = slab.current;
+    if (!m?.parent) return;
+    const s = m.parent.getWorldScale(_worldScale).z || 1;
+    m.scale.z = (SLAB_DEPTH_M - SLAB_GAP_M) / s;
+    m.position.z = -SLAB_GAP_M / s;
+  });
   // (drawn before the face; the face is what's pointed at)
-  return <mesh geometry={geometry} material={SLAB_MATERIALS} position={[0, 0, -SLAB_DEPTH_M]} renderOrder={-1} raycast={() => null} />;
+  return <mesh ref={slab} geometry={geometry} material={SLAB_MATERIALS} renderOrder={-1} raycast={() => null} />;
 }
 
 /**
