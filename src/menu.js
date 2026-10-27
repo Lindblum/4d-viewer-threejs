@@ -160,7 +160,7 @@ export function menuItems(state, env) {
   });
   return [
     group('model', 'Model', 'shape', ['shape', 'faces', 'edges', 'shadow', 'rotate']),
-    group('video', 'Video', 'video', ['background', 'view', 'xrResolution']),
+    group('video', 'Video', 'video', ['background', 'view', 'vsync', 'xrResolution']),
     group('accessibility', 'Accessibility', 'accessibility', ['textSize', 'controllerGuide']),
   ];
 }
@@ -230,6 +230,12 @@ function settingsById(state, env) {
     { id: 'shadow', label: `2D Shadow: ${state.showShadow ? 'On' : 'Off'}`, icon: state.showShadow ? 'on' : 'off' },
     { id: 'rotate', label: `Rotate: ${state.paused ? 'Off' : 'On'}`, icon: state.paused ? 'pause' : 'rotate' },
     {
+      id: 'vsync',
+      label: `VSync: ${state.vsync ? 'On' : 'Off'}`,
+      icon: state.vsync ? 'vsyncOn' : 'vsyncOff',
+      title: 'On: a frame per display refresh. Off: frames as fast as they can be drawn (not in XR)',
+    },
+    {
       id: 'xrResolution',
       // (fixed when an XR session starts: changed during one, the session starts again when the slider's let go)
       label: `XR Resolution: ${percent(state.xrResolution)}${state.xrResolutionActive != null && state.xrResolution !== state.xrResolutionActive ? ' (on release)' : ''}`,
@@ -276,13 +282,16 @@ export function possibleLabels(env) {
     for (const flag of [false, true])
       for (const background of backgrounds)
         for (const view of env.views)
-          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], textSize: 1, controllerGuide: flag, xrResolution: 1, xrResolutionActive: null }, env)))
+          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], textSize: 1, controllerGuide: flag, vsync: flag, xrResolution: 1, xrResolutionActive: null }, env)))
             labels.add(item.label);
   for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
   for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
   // the sliders' widest values, and Controller Guide both ways
   labels.add(`Text Size: ${percent(TEXT_SIZE.max)}`);
   labels.add(`XR Resolution: ${percent(XR_RESOLUTION.max)} (on release)`);
-  for (const flag of [false, true]) labels.add(`Controller Guide: ${flag ? 'On' : 'Off'}`);
+  for (const flag of [false, true]) {
+    labels.add(`Controller Guide: ${flag ? 'On' : 'Off'}`);
+    labels.add(`VSync: ${flag ? 'On' : 'Off'}`);
+  }
   return [...labels];
 }

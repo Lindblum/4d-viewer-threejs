@@ -333,7 +333,7 @@ export default function Scene({ poly, state, actions, panels, onSelect, menuOver
       ) : (
         <Backdrop background={state.background} />
       )}
-      <FramePacing seeThrough={isSeeThrough(state.faces)} />
+      <FramePacing seeThrough={isSeeThrough(state.faces)} vsync={state.vsync} />
       {state.view === 'sbs' && !immersive && <SideBySide />}
       {state.view === 'interlaced' && !immersive && <Interlaced />}
       {phoneStereo && <PhoneStereoXR />}

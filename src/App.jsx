@@ -88,6 +88,15 @@ const toggleIn = (id) => (list) => (list.includes(id) ? list.filter((x) => x !==
 // Accessibility settings and XR Resolution are remembered in this browser
 const ACCESSIBILITY_KEY = '4d-viewer.accessibility';
 const XR_RESOLUTION_KEY = '4d-viewer.xrResolution';
+const VSYNC_KEY = '4d-viewer.vsync';
+
+function loadVSync() {
+  try {
+    return JSON.parse(localStorage.getItem(VSYNC_KEY)) !== false;
+  } catch {
+    return true;
+  }
+}
 
 function loadXRResolution() {
   try {
@@ -133,6 +142,14 @@ function useViewerState() {
       // (not remembered)
     }
   }, [accessibility]);
+  const [vsync, setVSync] = useState(loadVSync); // Options → Video → VSync (see FramePacing)
+  useEffect(() => {
+    try {
+      localStorage.setItem(VSYNC_KEY, JSON.stringify(vsync));
+    } catch {
+      // (not remembered)
+    }
+  }, [vsync]);
   const [xrResolution, setXRResolution] = useState(loadXRResolution);
   const [xrResolutionActive, setXRResolutionActive] = useState(null); // the XR session's own (fixed when it starts), while in one
   useEffect(() => {
@@ -175,6 +192,7 @@ function useViewerState() {
       setTextSize: (v) => setAccessibility((a) => ({ ...a, textSize: snapToSlider(TEXT_SIZE, v) })),
       toggleControllerGuide: () => setAccessibility((a) => ({ ...a, controllerGuide: !a.controllerGuide })),
       setXRResolution: (v) => setXRResolution(snapToSlider(XR_RESOLUTION, v)),
+      toggleVSync: () => setVSync((v) => !v),
       setXRResolutionActive,
       setKeepXRPose,
     }),
@@ -198,6 +216,7 @@ function useViewerState() {
     groups,
     dropdowns,
     ...accessibility,
+    vsync,
     xrResolution,
     xrResolutionActive,
     keepXRPose,
@@ -668,6 +687,7 @@ export default function App() {
     else if (id === 'shadow') actions.toggleShadow();
     else if (id === 'rotate') actions.togglePause();
     else if (id === 'controllerGuide') actions.toggleControllerGuide();
+    else if (id === 'vsync') actions.toggleVSync();
   };
   const slideTo = (id, value) => {
     if (id === 'textSize') actions.setTextSize(value);

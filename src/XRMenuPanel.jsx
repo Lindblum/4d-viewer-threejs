@@ -180,13 +180,14 @@ function drawButtonFrame(ctx, r, { hot, disabled }) {
 }
 
 // Every panel is a slab 1 cm thick (as in grid-game-threejs) behind its
-// face, its outline the face's rounded frame. Unlit, so its sides are
-// drawn lighter than its back to show the thickness.
+// face, its outline the face's rounded frame, slightly see-through. The face
+// shows from the front only; from behind, the slab's back. Unlit, so its
+// sides are drawn lighter than its back to show the thickness.
 const SLAB_DEPTH_M = 0.01;
 const FRAME_RADIUS = 40; // canvas px: the frame's rounding (see the panels' draw)
 const SLAB_MATERIALS = [
-  new THREE.MeshBasicMaterial({ color: 0x141a28, transparent: true, opacity: 0.85, depthWrite: false }), // front and back
-  new THREE.MeshBasicMaterial({ color: 0x4a5670, transparent: true, opacity: 0.9, depthWrite: false }), // the sides
+  new THREE.MeshBasicMaterial({ color: 0x1c2230, transparent: true, opacity: 0.8, depthWrite: false }), // front and back
+  new THREE.MeshBasicMaterial({ color: 0x5a6782, transparent: true, opacity: 0.9, depthWrite: false }), // the sides
 ];
 
 /** The slab behind a panel face `w` x `h` (m) centred on its parent, from SLAB_DEPTH_M behind to just behind the face. */
@@ -562,8 +563,8 @@ export function XRPanel({ panel, onSelect, groupRef }) {
         }}
       >
         <planeGeometry args={[width * PX_M, height * PX_M]} />
-        {/* both sides: walked around or flipped by a grip, the panel stays visible and usable */}
-        <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
+        {/* the front only (pressed from the front only too); alphaTest: the clear rest of the canvas draws nothing */}
+        <meshBasicMaterial map={texture} transparent alphaTest={0.01} depthWrite={false} toneMapped={false} />
         <PanelSlab w={width * PX_M} h={height * PX_M} />
       </mesh>
     </group>
