@@ -8,7 +8,23 @@ import { MENU_TOGGLE } from './XRMenuPanel.jsx';
 import { phoneARSessionInit } from './PhoneStereo.jsx';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
-import { MENU_TITLE, PICK_PREFIX, splitLabel, XR_VIEWS, availableViews, menuItems, pickedChoice, possibleLabels, settingItems } from './menu.js';
+import { pulse } from './grip.js';
+import {
+  MENU_TITLE,
+  PICK_PREFIX,
+  TEXT_SIZE,
+  VIBRATION,
+  splitLabel,
+  XR_VIEWS,
+  availableViews,
+  menuItems,
+  parseSlide,
+  pickedChoice,
+  possibleLabels,
+  settingItems,
+  slideId,
+  snapToSlider,
+} from './menu.js';
 
 // How the display settings work:
 //   Background (Solid / Skybox / Passthrough): what is behind the model. Changes live.
@@ -65,6 +81,23 @@ const wrap = (i, n) => (i + n) % n;
 // `list` with `id` added, or taken out if it was there
 const toggleIn = (id) => (list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
+// Accessibility settings are remembered in this browser
+const ACCESSIBILITY_KEY = '4d-viewer.accessibility';
+
+function loadAccessibility() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(ACCESSIBILITY_KEY)) ?? {};
+  } catch {
+    // (storage blocked or unreadable: the defaults)
+  }
+  return {
+    textSize: snapToSlider(TEXT_SIZE, saved.textSize),
+    vibration: snapToSlider(VIBRATION, saved.vibration),
+    controllerGuide: saved.controllerGuide === true,
+  };
+}
+
 function useViewerState() {
   const [shapeIndex, setShapeIndex] = useState(DEFAULT_SHAPE_INDEX);
   const [background, setBackground] = useState('skybox'); // 'solid' | 'skybox' | 'passthrough'
@@ -77,8 +110,20 @@ function useViewerState() {
   const [edges, setEdges] = useState('off'); // see Edges.jsx
   const [paused, setPaused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
-  const [groups, setGroups] = useState([]); // the groups (Model / Video) whose settings are open, likewise
+  const [groups, setGroups] = useState([]); // the groups (Model / Video / Accessibility) whose settings are open, likewise
   const [dropdowns, setDropdowns] = useState([]); // the dropdowns whose lists are open, likewise
+  const [accessibility, setAccessibility] = useState(loadAccessibility); // { textSize, vibration, controllerGuide }
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACCESSIBILITY_KEY, JSON.stringify(accessibility));
+    } catch {
+      // (not remembered)
+    }
+  }, [accessibility]);
+  // Text Size: the windowed panel's text and icons (styles.css --text-scale)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--text-scale', String(accessibility.textSize));
+  }, [accessibility.textSize]);
 
   const actions = useMemo(
     () => ({
@@ -103,6 +148,9 @@ function useViewerState() {
       toggleGroup: (id) => setGroups(toggleIn(id)),
       toggleDropdown: (id) => setDropdowns(toggleIn(id)),
       closeDropdown: (id) => setDropdowns((list) => list.filter((x) => x !== id)),
+      setTextSize: (v) => setAccessibility((a) => ({ ...a, textSize: snapToSlider(TEXT_SIZE, v) })),
+      setVibration: (v) => setAccessibility((a) => ({ ...a, vibration: snapToSlider(VIBRATION, v) })),
+      toggleControllerGuide: () => setAccessibility((a) => ({ ...a, controllerGuide: !a.controllerGuide })),
     }),
     [],
   );
@@ -123,6 +171,7 @@ function useViewerState() {
     menuOpen,
     groups,
     dropdowns,
+    ...accessibility,
   };
   return [state, actions];
 }
@@ -210,6 +259,25 @@ function MenuButtons({ items, labels, onSelect }) {
 function MenuList({ items, onSelect }) {
   return items.map((item) => {
     const open = (item.group ?? item.dropdown)?.open;
+    if (item.slider) {
+      // a slider: its button's look, the track beneath the label when there's no room beside it
+      const { min, max, step, value } = item.slider;
+      return (
+        <label key={item.id} className="menu-btn menu-slider" title={item.title}>
+          <Icon name={item.icon} />
+          <Label text={item.label} />
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            aria-label={splitLabel(item.label).name}
+            onChange={(e) => onSelect(slideId(item.id, Number(e.target.value)))}
+          />
+        </label>
+      );
+    }
     return (
       <Fragment key={item.id}>
         <button
@@ -473,7 +541,9 @@ export default function App() {
 
   const items = menuItems(state, { passthroughAvailable, views, phone, checking: !support.checked && !phone });
   const onSelect = (id) => {
-    if (id.startsWith(PICK_PREFIX)) {
+    const slide = parseSlide(id);
+    if (slide) slideTo(slide.id, slide.value);
+    else if (id.startsWith(PICK_PREFIX)) {
       // a choice from an open dropdown's list, which then closes
       const choice = pickedChoice(items, id);
       if (!choice) return;
@@ -484,6 +554,17 @@ export default function App() {
     else if (settingItems(items).find((item) => item.id === id)?.dropdown) actions.toggleDropdown(id);
     else if (id === 'shadow') actions.toggleShadow();
     else if (id === 'rotate') actions.togglePause();
+    else if (id === 'controllerGuide') actions.toggleControllerGuide();
+  };
+  const slideTo = (id, value) => {
+    if (id === 'textSize') actions.setTextSize(value);
+    else if (id === 'vibration') {
+      const v = snapToSlider(VIBRATION, value);
+      if (v === state.vibration) return;
+      actions.setVibration(v);
+      // a buzz at the new strength, to feel it
+      for (const source of store.getState().session?.inputSources ?? []) pulse(source.gamepad, 0.6, 60, v);
+    }
   };
   const choose = (id, value) => {
     if (id === 'shape') actions.setShape(value);

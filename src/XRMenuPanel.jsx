@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { XRSpace, useXRInputSourceState } from '@react-three/xr';
 import { iconSvg } from './Icon.jsx';
-import { settingItems, splitLabel } from './menu.js';
+import { parseSlide, settingItems, slideId, snapToSlider, splitLabel } from './menu.js';
 import { useGazeTarget } from './Gaze.jsx';
 
 // The options panel in XR. It draws the same menu model as the windowed
 // panel (title, XR status, "Name: Value" buttons, and the shared
 // open / collapsed state) onto a canvas, since WebXR can't show page
 // elements. Collapsed, it keeps only its gear button, in the same place. An open dropdown lists
-// its choices beneath it, two to a row. Past MAX_VIEW_H the settings scroll
+// its choices beneath it, two to a row. A slider's track fills the right of its button: a
+// pointer presses or drags along it, the gaze sets the value it stares at. Past MAX_VIEW_H the settings scroll
 // beneath the title, with arrows (for gaze), a thumb to drag, a track to
 // page and the mouse wheel. The grip at the bottom-right corner, dragged,
 // sets the panel's width and the height it may grow to. Controller rays,
@@ -85,14 +85,27 @@ function labelWidth(label) {
   return value ? textWidth(`${name}:`, BUTTON_FONT) + VALUE_GAP + textWidth(value, BUTTON_FONT) : textWidth(name, BUTTON_FONT);
 }
 
-function panelWidth(title, labels, choices) {
+// a slider: its track from this share of its button's width to the right edge
+const SLIDER_FROM = 0.55;
+const KNOB = 17; // the knob's radius
+const sliderTrack = (r) => ({ x0: r.x + r.w * SLIDER_FROM, x1: r.x + r.w - INSET - KNOB });
+/** Slider `item`'s value at canvas x `px` on button rect `r`, snapped to its steps. */
+function sliderValueAt(item, r, px) {
+  const { x0, x1 } = sliderTrack(r);
+  const { min, max } = item.slider;
+  return snapToSlider(item.slider, min + clamp((px - x0) / (x1 - x0), 0, 1) * (max - min));
+}
+
+function panelWidth(title, labels, choices, sliderLabels) {
   // the settings sit indented in their groups, and their choices further, two to a row
   const button = OPTION_INDENT + INSET + ICON + ICON_GAP + Math.max(0, ...labels.map(labelWidth)) + ICON_GAP + TRAILING + INSET;
+  // a slider's label gets the left of its button, its track the rest
+  const slider = OPTION_INDENT + Math.max(0, ...sliderLabels.map((l) => (INSET + ICON + ICON_GAP + labelWidth(l) + 24) / SLIDER_FROM));
   const choiceWidth = ({ label, icon }) => textWidth(label, OPTION_FONT) + (icon ? OPTION_ICON + OPTION_ICON_GAP : 0);
   const choice = 2 * INSET + CHECK + 10 + Math.max(0, ...choices.map(choiceWidth));
   const choiceRow = 2 * OPTION_INDENT + 2 * choice + OPTION_GAP;
   const titleRow = TOGGLE + 24 + textWidth(title, TITLE_FONT);
-  return Math.ceil(2 * PAD + Math.max(button, choiceRow, titleRow));
+  return Math.ceil(2 * PAD + Math.max(button, slider, choiceRow, titleRow));
 }
 
 /** Where the settings start, beneath the title and status line. */
@@ -166,6 +179,43 @@ function drawButtonFrame(ctx, r, { hot, disabled }) {
   ctx.stroke();
 }
 
+// Every panel is a slab 1 cm thick (as in grid-game-threejs) behind its
+// face, its outline the face's rounded frame. Unlit, so its sides are
+// drawn lighter than its back to show the thickness.
+const SLAB_DEPTH_M = 0.01;
+const FRAME_RADIUS = 40; // canvas px: the frame's rounding (see the panels' draw)
+const SLAB_MATERIALS = [
+  new THREE.MeshBasicMaterial({ color: 0x141a28, transparent: true, opacity: 0.85, depthWrite: false }), // front and back
+  new THREE.MeshBasicMaterial({ color: 0x4a5670, transparent: true, opacity: 0.9, depthWrite: false }), // the sides
+];
+
+/** The slab behind a panel face `w` x `h` (m) centred on its parent, from SLAB_DEPTH_M behind to just behind the face. */
+function PanelSlab({ w, h }) {
+  const geometry = useMemo(() => {
+    const r = Math.min(FRAME_RADIUS * PX_M, w / 2, h / 2);
+    const [x0, y0, x1, y1] = [-w / 2, -h / 2, w / 2, h / 2];
+    const shape = new THREE.Shape();
+    shape.moveTo(x0 + r, y0);
+    shape.lineTo(x1 - r, y0);
+    shape.absarc(x1 - r, y0 + r, r, -Math.PI / 2, 0);
+    shape.lineTo(x1, y1 - r);
+    shape.absarc(x1 - r, y1 - r, r, 0, Math.PI / 2);
+    shape.lineTo(x0 + r, y1);
+    shape.absarc(x0 + r, y1 - r, r, Math.PI / 2, Math.PI);
+    shape.lineTo(x0, y0 + r);
+    shape.absarc(x0 + r, y0 + r, r, Math.PI, Math.PI * 1.5);
+    return new THREE.ExtrudeGeometry(shape, { depth: SLAB_DEPTH_M - 0.0005, bevelEnabled: false, curveSegments: 6 });
+  }, [w, h]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  // (drawn before the face; the face is what's pointed at)
+  return <mesh geometry={geometry} material={SLAB_MATERIALS} position={[0, 0, -SLAB_DEPTH_M]} renderOrder={-1} raycast={() => null} />;
+}
+
+/**
+ * The options panel. Its group's userData.bounds is its visible panel in the
+ * group's metres ({ left, right, top, bottom, button: the gear's centre }),
+ * for docking and stacking it (see Grab.jsx), which also places the group.
+ */
 export function XRMenuPanel({ title, status, items, labels, open, onSelect, groupRef, ...groupProps }) {
   const mesh = useRef(null);
   const [pointerKey, setPointerKey] = useState(null);
@@ -175,7 +225,8 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
   const panelW = useMemo(() => {
     const settings = settingItems(items);
     const choices = settings.flatMap((item) => item.dropdown?.options ?? []);
-    return panelWidth(title, labels ?? settings.map((i) => i.label), choices);
+    const sliderLabels = (labels ?? []).filter((l) => settings.some((i) => i.slider && splitLabel(i.label).name === splitLabel(l).name));
+    return panelWidth(title, labels ?? settings.map((i) => i.label), choices, sliderLabels);
   }, [title, labels, items]);
   // { w, h } in canvas px, dragged to with the grip: the width, and the height it may grow to
   const [size, setSize] = useState(null);
@@ -292,7 +343,8 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
         continue;
       }
       const { item } = r;
-      drawButtonFrame(ctx, r, { hot: item.id === hovered && !item.disabled, disabled: item.disabled });
+      const hot = (item.id === hovered || parseSlide(hovered)?.id === item.id) && !item.disabled;
+      drawButtonFrame(ctx, r, { hot, disabled: item.disabled });
       ctx.globalAlpha = item.disabled ? 0.4 : 1;
       const img = iconImage(item.icon, redraw);
       if (img.complete && img.naturalWidth) ctx.drawImage(img, r.x + INSET, r.y + (r.h - ICON) / 2, ICON, ICON);
@@ -301,6 +353,30 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
       // the name on the left, the value against the right edge, then a dropdown's chevron
       const tx = r.x + INSET + ICON + ICON_GAP;
       let right = r.x + r.w - INSET;
+      if (item.slider) {
+        // the track and its knob on the right; the label gets the rest
+        const { x0, x1 } = sliderTrack(r);
+        const { min, max, value } = item.slider;
+        const kx = x0 + ((value - min) / (max - min)) * (x1 - x0);
+        const ty = r.y + r.h / 2;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.beginPath();
+        ctx.moveTo(x0, ty);
+        ctx.lineTo(x1, ty);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.beginPath();
+        ctx.moveTo(x0, ty);
+        ctx.lineTo(kx, ty);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(kx, ty, hot ? KNOB + 3 : KNOB, 0, Math.PI * 2);
+        ctx.fill();
+        right = x0 - 24;
+      }
       const list = item.group ?? item.dropdown;
       if (list) {
         const icon = iconImage(list.open ? 'dropdownOpen' : 'dropdown', redraw);
@@ -365,7 +441,10 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
     if (bar) for (const q of [bar.up, bar.down, bar.track]) if (inside(q)) return q.id;
     if (py < viewTop || py > viewBottom) return null;
     const r = rects.slice(1).find((q) => inside(q, q.y - scrollTop));
-    return r && !r.item?.disabled && !r.option?.disabled ? r.id : null;
+    if (!r || r.item?.disabled || r.option?.disabled) return null;
+    // a slider's track (or a little left of it): the value there
+    if (r.item?.slider && px >= sliderTrack(r).x0 - 2 * KNOB) return slideId(r.id, sliderValueAt(r.item, r, px));
+    return r.id;
   };
   const canvasPoint = (uv) => [uv.x * width, (1 - uv.y) * height];
   const pick = (hit) => (hit?.uv ? controlAt(...canvasPoint(hit.uv)) : null);
@@ -399,16 +478,33 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
   };
   useGazeTarget(mesh, select, setGazeKey, gazePick);
 
+  const centre = [((width - panelW) / 2) * PX_M, ((openHeight - height) / 2) * PX_M];
+  const bounds = {
+    left: centre[0] - (width / 2) * PX_M,
+    right: centre[0] + (width / 2) * PX_M,
+    top: centre[1] + (height / 2) * PX_M,
+    bottom: centre[1] - (height / 2) * PX_M,
+    button: centre[0] - (width / 2) * PX_M + (PAD + TOGGLE / 2) * PX_M,
+  };
   return (
-    <group ref={groupRef} {...groupProps}>
+    <group ref={groupRef} userData={{ bounds }} {...groupProps}>
       <mesh
         ref={mesh}
-        position={[((width - panelW) / 2) * PX_M, ((openHeight - height) / 2) * PX_M, 0]}
+        position={[centre[0], centre[1], 0]}
         onPointerDown={(e) => {
           const key = pick(e);
           if (key === RESIZE) {
             e.stopPropagation();
             startDrag(e, 'resize');
+            return;
+          }
+          const slide = parseSlide(key);
+          if (slide) {
+            // pressed on a slider: set there, then follow the ray along the track
+            e.stopPropagation();
+            select(key);
+            startDrag(e, 'slider');
+            if (drag.current) drag.current.slider = rects.find((q) => q.id === slide.id);
             return;
           }
           if (!bar || key !== SCROLL_TRACK) return;
@@ -427,7 +523,11 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
           const at = rayPoint(e.ray);
           if (!at) return;
           if (d.kind === 'thumb') scrollTo(d.scroll + ((at.y - d.at.y) * scrollMax) / bar.travel);
-          else
+          else if (d.kind === 'slider') {
+            // (the group's x, from its centre, to canvas px: the panel's left edge stays at -panelW / 2)
+            const r = rects.find((q) => q.id === d.slider?.id);
+            if (r) select(slideId(r.id, sliderValueAt(r.item, r, at.x + panelW / 2)));
+          } else
             setSize({
               w: Math.round(clamp(d.size.w + at.x - d.at.x, MIN_SIZE.w, MAX_SIZE.w)),
               h: Math.round(clamp(d.size.h + at.y - d.at.y, MIN_SIZE.h, MAX_SIZE.h)),
@@ -454,23 +554,20 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
         <planeGeometry args={[width * PX_M, height * PX_M]} />
         {/* both sides: walked around or flipped by a grip, the panel stays visible and usable */}
         <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
+        <PanelSlab w={width * PX_M} h={height * PX_M} />
       </mesh>
     </group>
   );
 }
 
 // The View panel: one button, the monitor, back to the Normal view (out of
-// XR), standing on the left controller like grid-game-threejs's. Drawn like
-// the collapsed options panel, at half its size.
+// XR), as in grid-game-threejs: drawn like the collapsed options panel, and
+// docked beneath it on a controller at first (see Grab.jsx, which places it).
 const VIEW_PANEL_PX = 2 * PAD + TOGGLE;
-const VIEW_PANEL_M = VIEW_PANEL_PX * PX_M * 0.5;
-// in the controller's pointing frame (-Z forward, +Y up): standing on this
-// point, its face tipped up toward the eyes
-const DOCK_ANCHOR = [0, 0.05, 0.02];
-const DOCK_TILT = -0.5; // radians about the controller's X: the top leans forward
+const VIEW_PANEL_M = VIEW_PANEL_PX * PX_M;
+const VIEW_BOUNDS = { left: -VIEW_PANEL_M / 2, right: VIEW_PANEL_M / 2, top: VIEW_PANEL_M / 2, bottom: -VIEW_PANEL_M / 2, button: 0 };
 
-export function XRViewPanel({ onExit }) {
-  const left = useXRInputSourceState('controller', 'left');
+export function XRViewPanel({ onExit, groupRef }) {
   const [hot, setHot] = useState(false);
   const [iconsLoaded, setIconsLoaded] = useState(0);
   const canvas = useMemo(() => {
@@ -490,7 +587,7 @@ export function XRViewPanel({ onExit }) {
     const ctx = canvas.getContext('2d');
     const size = VIEW_PANEL_PX;
     ctx.clearRect(0, 0, size, size);
-    roundRect(ctx, 4, 4, size - 8, size - 8, 40);
+    roundRect(ctx, 4, 4, size - 8, size - 8, FRAME_RADIUS);
     ctx.fillStyle = 'rgba(12, 16, 28, 0.9)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
@@ -503,26 +600,20 @@ export function XRViewPanel({ onExit }) {
     texture.needsUpdate = true;
   }, [canvas, texture, hot, iconsLoaded]);
 
-  useEffect(() => {
-    if (!left) setHot(false);
-  }, [left]);
-  if (!left) return null;
   return (
-    <XRSpace space={left.inputSource.targetRaySpace}>
-      <group position={DOCK_ANCHOR} rotation={[DOCK_TILT, 0, 0]}>
-        <mesh
-          position={[0, VIEW_PANEL_M / 2, 0]}
-          onPointerOver={() => setHot(true)}
-          onPointerOut={() => setHot(false)}
-          onClick={(e) => {
-            e.stopPropagation();
-            onExit();
-          }}
-        >
-          <planeGeometry args={[VIEW_PANEL_M, VIEW_PANEL_M]} />
-          <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
-        </mesh>
-      </group>
-    </XRSpace>
+    <group ref={groupRef} userData={{ bounds: VIEW_BOUNDS }}>
+      <mesh
+        onPointerOver={() => setHot(true)}
+        onPointerOut={() => setHot(false)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onExit();
+        }}
+      >
+        <planeGeometry args={[VIEW_PANEL_M, VIEW_PANEL_M]} />
+        <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
+        <PanelSlab w={VIEW_PANEL_M} h={VIEW_PANEL_M} />
+      </mesh>
+    </group>
   );
 }

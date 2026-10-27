@@ -10,6 +10,7 @@ import diamond from 'lineicons/assets/svgs/regular/diamonds-1.svg?raw';
 import chevronDown from 'lineicons/assets/svgs/regular/chevron-down.svg?raw';
 import chevronUp from 'lineicons/assets/svgs/regular/chevron-up.svg?raw';
 import check from 'lineicons/assets/svgs/regular/check.svg?raw';
+import gamepad from 'lineicons/assets/svgs/regular/game-pad-modern-1.svg?raw';
 
 // Lineicons ship with a fixed fill; recolour to follow the surrounding text
 // and size to the font.
@@ -101,6 +102,37 @@ const headsetOff = headset.replace(
 </svg>`,
 );
 
+// Accessibility: the figure with open arms, in a circle
+const accessibility = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="12" r="9.25" stroke="currentColor" stroke-width="1.5"/>
+<circle cx="12" cy="7.4" r="1.4" fill="currentColor"/>
+<path d="M7.5 10.1 12 11l4.5-.9M12 11v3.2m0 0-2.2 3.6m2.2-3.6 2.2 3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+// Text Size: a big A beside a small one
+const textSize = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<path d="M2.75 19.25 8 4.75l5.25 14.5M4.6 14.25h6.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M14.25 19.25 17.75 10l3.5 9.25M15.5 16.25h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+// Vibration: a controller's handle between buzz marks, or struck through when off
+const vibrationOn = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<rect x="8.25" y="3.25" width="7.5" height="17.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+<path d="M4.75 8.5 3 10.25l1.75 1.75L3 13.75l1.75 1.75M19.25 8.5 21 10.25 19.25 12 21 13.75l-1.75 1.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+const vibrationOff = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<rect x="8.25" y="3.25" width="7.5" height="17.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+<path d="M3.5 3.5 20.5 20.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`;
+
+// Controller Guide: a gamepad, struck through when off
+const controllerGuideOn = recolour(gamepad);
+const controllerGuideOff = recolour(gamepad).replace(
+  '</svg>',
+  `<path d="M3.5 3.5 20.5 20.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`,
+);
+
 const ICONS = {
   mono: recolour(eye),
   stereo: eyes,
@@ -127,6 +159,12 @@ const ICONS = {
   dropdown: recolour(chevronDown),
   dropdownOpen: recolour(chevronUp),
   check: recolour(check),
+  accessibility,
+  textSize,
+  vibrationOn,
+  vibrationOff,
+  controllerGuideOn,
+  controllerGuideOff,
 };
 
 /** An icon as a standalone SVG in a fixed colour, for drawing onto a canvas. */

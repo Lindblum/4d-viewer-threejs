@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { CameraBackground, CardboardRig } from './Cardboard.jsx';
 import { GazeReticle } from './Gaze.jsx';
+import { ControllerGuide } from './ControllerGuide.jsx';
 import { XRMenuPanel, XRViewPanel } from './XRMenuPanel.jsx';
 import { useControllerGrips } from './Grab.jsx';
 import { SOLID_BACKGROUND } from './menu.js';
@@ -54,10 +55,10 @@ const FACE_ALPHA_MAP = createFaceAlphaMap();
 // Eye level, a couple of metres ahead. The shadow lands just above the floor.
 const POLY_POSITION = [0, 1.6, -2.5];
 const SHADOW_Y = 0.1;
-// The XR panel starts at waist height, tilted up toward the viewer, and
-// travels with the player. Constants, so a re-render never undoes a move.
-const MENU_POSITION = [0, 0.95, -0.75];
-const MENU_ROTATION = [-0.55, 0, 0];
+// Without controllers (gaze, phones) the XR panel stands at waist height,
+// tilted up toward the viewer, and travels with the player (with them, it
+// docks on a controller: see Grab.jsx)
+const MENU_HOME = { position: [0, 0.95, -0.75], rotation: [-0.55, 0, 0] };
 // a phone's stereo view is blurrier and smaller than a headset's: a bigger panel stays readable
 const PHONE_STEREO_MENU_SCALE = 1.5;
 
@@ -251,18 +252,20 @@ function PolytopeView({ model, poly, look, edges, speed, visible, showShadow, in
 const _head = new THREE.Vector3();
 
 /**
- * Left thumbstick moves, right thumbstick turns smoothly about the head.
- * The grip buttons move, turn and scale the model, or carry the panel.
- * The panel travels with the player.
+ * Left thumbstick moves, right thumbstick turns smoothly about the head,
+ * except while that hand's grip holds something (its stick is then the
+ * grip's). The grip buttons move, turn and scale the model, or carry, dock
+ * and undock the panels (see Grab.jsx), which travel with the player.
  */
-function Player({ model, menu, poly, children }) {
+function Player({ model, panels, poly, vibration, textSize, homeScale, children }) {
   const origin = useRef(null);
+  const holding = useControllerGrips({ model, panels, origin, poly, vibration, textSize, home: MENU_HOME, homeScale });
   useXRControllerLocomotion(
     (velocity, turn, delta, state) => {
       const o = origin.current;
       if (!o) return;
-      o.position.addScaledVector(velocity, delta);
-      if (!turn) return;
+      if (!holding.current.left) o.position.addScaledVector(velocity, delta);
+      if (!turn || holding.current.right) return;
       // swing the origin around the head so turning doesn't move the viewer
       state.camera.getWorldPosition(_head);
       const dx = o.position.x - _head.x;
@@ -276,7 +279,6 @@ function Player({ model, menu, poly, children }) {
     { speed: 1.5 },
     { type: 'smooth', speed: 1.5 },
   );
-  useControllerGrips({ model, menu, origin, poly });
   return <XROrigin ref={origin}>{children}</XROrigin>;
 }
 
@@ -301,6 +303,8 @@ export default function Scene({ poly, state, actions, menu, menuOverlay, phone, 
   useEffect(() => () => poly.dispose(), [poly]);
   const model = useRef(null);
   const menuPanel = useRef(null);
+  const viewPanel = useRef(null);
+  const panels = useMemo(() => ({ menu: menuPanel, view: viewPanel }), []);
   const polytopeProps = {
     model,
     inSession,
@@ -347,18 +351,18 @@ export default function Scene({ poly, state, actions, menu, menuOverlay, phone, 
           <FaceEnvironment />
         ))}
       <PolytopeView {...polytopeProps} />
-      <Player model={model} menu={menuPanel} poly={poly}>
-        {immersive && !menuOverlay && (
-          <XRMenuPanel
-            {...menu}
-            groupRef={menuPanel}
-            position={MENU_POSITION}
-            rotation={MENU_ROTATION}
-            scale={phone && state.stereo ? PHONE_STEREO_MENU_SCALE : 1}
-          />
-        )}
-        {inSession && !phone && <XRViewPanel onExit={onExitXR} />}
+      <Player
+        model={model}
+        panels={panels}
+        poly={poly}
+        vibration={state.vibration}
+        textSize={state.textSize}
+        homeScale={phone && state.stereo ? PHONE_STEREO_MENU_SCALE : 1}
+      >
+        {immersive && !menuOverlay && <XRMenuPanel {...menu} groupRef={menuPanel} />}
+        {inSession && !phone && <XRViewPanel groupRef={viewPanel} onExit={onExitXR} />}
       </Player>
+      {inSession && hasControllers && state.controllerGuide && <ControllerGuide textSize={state.textSize} />}
       {immersive && !hasControllers && <GazeReticle />}
       {state.handheld ? (
         <CardboardRig split={state.stereo} />

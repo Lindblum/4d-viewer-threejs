@@ -1,7 +1,8 @@
 // Options menu model shared by the windowed panel (DOM) and the XR panel
-// (drawn on a canvas): two groups, Model and Video, each opening a list of
-// setting buttons beneath it, each "Name: Value". A dropdown opens a list of
-// choices beneath it (a chevron on its right); the rest toggle when pressed.
+// (drawn on a canvas): three groups, Model, Video and Accessibility, each
+// opening a list of setting buttons beneath it, each "Name: Value". A
+// dropdown opens a list of choices beneath it (a chevron on its right); a
+// slider sets a value along its track; the rest toggle when pressed.
 
 import { SHAPES } from './polytopeGeometry.js';
 import { FACE_LOOKS, FACE_LOOK_LABELS } from './faceLooks.js';
@@ -56,6 +57,30 @@ export function splitLabel(label) {
 
 export const PICK_PREFIX = 'pick:';
 
+/** Accessibility → Text Size: a multiplier on the panels' text and icons, 75% to 200% (as in grid-game-threejs). */
+export const TEXT_SIZE = Object.freeze({ min: 0.75, max: 2, step: 0.25, default: 1 });
+/** Accessibility → Vibration: how strong the controllers' haptics are, 0 (off) to 2 (1: as made; above, every buzz stronger, up to the controller's most). */
+export const VIBRATION = Object.freeze({ min: 0, max: 2, step: 0.1, default: 1 });
+
+/** `value` within `spec` ({ min, max, step, default }), snapped to its steps. */
+export function snapToSlider(spec, value) {
+  const n = Number(value);
+  const v = Math.min(spec.max, Math.max(spec.min, Number.isFinite(n) ? n : spec.default));
+  return +(Math.round(v / spec.step) * spec.step).toFixed(4);
+}
+
+const SLIDE_PREFIX = 'slide:';
+/** The id a slider sends to set `value`: "slide:<id>=<value>" (a pointer's press or drag, the gaze's stare). */
+export const slideId = (id, value) => `${SLIDE_PREFIX}${id}=${value}`;
+/** A "slide:<id>=<value>" id's { id, value }, or null for any other id. */
+export function parseSlide(slide) {
+  if (!slide?.startsWith(SLIDE_PREFIX)) return null;
+  const [id, value] = slide.slice(SLIDE_PREFIX.length).split('=');
+  return { id, value: Number(value) };
+}
+
+const percent = (v) => `${Math.round(v * 100)}%`;
+
 /**
  * A dropdown: the button shows the current choice, and when it is open
  * (in `state.dropdowns`), lists every choice beneath it. `choices`:
@@ -81,10 +106,10 @@ export function pickedChoice(items, pickId) {
 }
 
 /**
- * Items: the groups Model and Video, { id, label, icon, group: { open, items } },
+ * Items: the groups Model, Video and Accessibility, { id, label, icon, group: { open, items } },
  * which, when open (in `state.groups`), list their settings beneath, indented like
  * a dropdown's choices. Settings: { id, label ("Name: Value", see splitLabel),
- * icon, disabled?, title?, dropdown? }. `dropdown`: { open, options: [{ id,
+ * icon, disabled?, title?, dropdown?, slider? }. `slider`: { min, max, step, value }. `dropdown`: { open, options: [{ id,
  * label, value, selected, icon?, disabled?, title? }] }, drawn with a chevron at the
  * far right and, when open, its options beneath. `env`: { passthroughAvailable,
  * views (available), phone, checking }.
@@ -100,6 +125,7 @@ export function menuItems(state, env) {
   return [
     group('model', 'Model', 'shape', ['shape', 'faces', 'edges', 'shadow', 'rotate']),
     group('video', 'Video', 'video', ['background', 'view']),
+    group('accessibility', 'Accessibility', 'accessibility', ['textSize', 'vibration', 'controllerGuide']),
   ];
 }
 
@@ -167,6 +193,25 @@ function settingsById(state, env) {
     },
     { id: 'shadow', label: `2D Shadow: ${state.showShadow ? 'On' : 'Off'}`, icon: state.showShadow ? 'on' : 'off' },
     { id: 'rotate', label: `Rotate: ${state.paused ? 'Off' : 'On'}`, icon: state.paused ? 'pause' : 'rotate' },
+    {
+      id: 'textSize',
+      label: `Text Size: ${percent(state.textSize)}`,
+      icon: 'textSize',
+      slider: { ...TEXT_SIZE, value: state.textSize },
+    },
+    {
+      id: 'vibration',
+      label: `Vibration: ${state.vibration > 0 ? percent(state.vibration) : 'Off'}`,
+      icon: state.vibration > 0 ? 'vibrationOn' : 'vibrationOff',
+      slider: { ...VIBRATION, value: state.vibration },
+      title: 'How strongly the XR controllers buzz',
+    },
+    {
+      id: 'controllerGuide',
+      label: `Controller Guide: ${state.controllerGuide ? 'On' : 'Off'}`,
+      icon: state.controllerGuide ? 'controllerGuideOn' : 'controllerGuideOff',
+      title: "In XR, labels beside the controllers' buttons saying what they do",
+    },
   ];
   return Object.fromEntries(items.map((item) => [item.id, item]));
 }
@@ -194,9 +239,13 @@ export function possibleLabels(env) {
     for (const flag of [false, true])
       for (const background of backgrounds)
         for (const view of env.views)
-          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [] }, env)))
+          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], textSize: 1, vibration: 1, controllerGuide: flag }, env)))
             labels.add(item.label);
   for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
   for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
+  // the sliders' widest values, and Controller Guide both ways
+  labels.add(`Text Size: ${percent(TEXT_SIZE.max)}`);
+  labels.add(`Vibration: ${percent(VIBRATION.max)}`);
+  for (const flag of [false, true]) labels.add(`Controller Guide: ${flag ? 'On' : 'Off'}`);
   return [...labels];
 }

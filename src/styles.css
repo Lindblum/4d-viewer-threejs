@@ -4,6 +4,7 @@
   --border: rgba(255, 255, 255, 0.14);
   --text: #e8ecf6;
   --muted: #9aa3b8;
+  --text-scale: 1; /* Options → Accessibility → Text Size (set by App) */
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -33,13 +34,13 @@ canvas { display: block; touch-action: none; }
   border-radius: 14px;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   user-select: none;
 }
 
 .hud header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.hud h1 { flex: 1; margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0.02em; }
-.hud .collapse { display: grid; place-items: center; width: 30px; height: 28px; padding: 0; }
+.hud h1 { flex: 1; margin: 0; font-size: calc(16px * var(--text-scale)); font-weight: 650; letter-spacing: 0.02em; }
+.hud .collapse { display: grid; place-items: center; width: calc(30px * var(--text-scale)); height: calc(28px * var(--text-scale)); padding: 0; }
 .hud.collapsed header { margin-bottom: 0; }
 
 /* 3D: SBS: a copy of the panel per eye, each squeezed into its half of the screen */
@@ -48,7 +49,7 @@ canvas { display: block; touch-action: none; }
 .sbs-eye + .sbs-eye { left: 50%; }
 .sbs-eye > * { pointer-events: auto; }
 
-.stats { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.stats { margin: 0 0 10px; color: var(--muted); font-size: calc(12.5px * var(--text-scale)); font-variant-numeric: tabular-nums; }
 
 button {
   font: inherit;
@@ -75,19 +76,22 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
   align-items: center;
   gap: 14px;
   width: 100%;
-  min-height: 34px;
+  min-height: calc(34px * var(--text-scale));
   padding: 4px 10px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.14);
   text-align: left;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--text-scale));
 }
 .menu-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.4); }
 .menu-btn:disabled { opacity: 0.45; cursor: default; }
 .menu-btn .label { display: flex; flex: 1; gap: 18px; justify-content: space-between; min-width: 0; white-space: nowrap; line-height: 1.25; }
 .menu-btn .name { flex: none; }
 .menu-btn .value { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+/* a slider: its label, then the track beside it, or beneath when there is no room */
+.menu-slider { flex-wrap: wrap; row-gap: 4px; cursor: default; }
+.menu-slider input[type="range"] { flex: 1 1 120px; min-width: 100px; margin: 0; accent-color: #e8ecf6; cursor: pointer; }
 
 /* a group's settings beneath its button, indented like a dropdown's choices */
 .menu-group {
@@ -114,13 +118,13 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
   align-items: center;
   gap: 6px;
   min-width: 0;
-  min-height: 30px;
+  min-height: calc(30px * var(--text-scale));
   padding: 3px 10px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.1);
   text-align: left;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--text-scale));
 }
 .menu-option:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.4); }
 .menu-option.selected { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.45); }
@@ -129,7 +133,7 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 .icon { display: inline-flex; flex: none; align-items: center; line-height: 0; }
 .icon svg { display: block; }
 
-.note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.note { margin: 8px 0 0; color: var(--muted); font-size: calc(12px * var(--text-scale)); line-height: 1.45; }
 
 .note.error { color: #ff9b8a; }
 
