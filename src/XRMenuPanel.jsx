@@ -4,10 +4,11 @@ import { iconSvg } from './Icon.jsx';
 import { parseSlide, settingItems, slideId, snapToSlider, splitLabel } from './menu.js';
 import { useGazeTarget } from './Gaze.jsx';
 
-// The options panel in XR. It draws the same menu model as the windowed
-// panel (title, XR status, "Name: Value" buttons, and the shared
-// open / collapsed state) onto a canvas, since WebXR can't show page
-// elements. Collapsed, it keeps only its gear button, in the same place. An open dropdown lists
+// The panels in XR. Each draws a panel of the same template as the windowed
+// ones (menu.js optionsPanel, viewPanel: its toggle button, title, XR status,
+// "Name: Value" buttons, and the shared open / collapsed state) onto a
+// canvas, since WebXR can't show page elements. Collapsed, it keeps only its
+// toggle button, in the same place. An open dropdown lists
 // its choices beneath it, two to a row. A slider's track fills the right of its button: a
 // pointer presses or drags along it, the gaze sets the value it stares at. Past MAX_VIEW_H the settings scroll
 // beneath the title, with arrows (for gaze), a thumb to drag, a track to
@@ -40,7 +41,6 @@ const GRIP = PAD; // the resize grip, filling the bottom-right corner's padding
 const MIN_SIZE = { w: 520, h: 360 }; // canvas px the panel can be dragged down to...
 const MAX_SIZE = { w: 2600, h: 2600 }; // ...and up to
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-export const MENU_TOGGLE = 'menu:toggle';
 
 const _plane = new THREE.Plane();
 const _normal = new THREE.Vector3();
@@ -116,9 +116,9 @@ const bodyTop = (lines) => TITLE_Y + 34 + lines * LINE_H + 16;
  * `item` for a button or `option` for a choice in an open dropdown.
  * `lists`: false lays it out as if every group and dropdown were closed.
  */
-function layout(open, items, lines, panelW, lists = true) {
-  const rects = [{ id: MENU_TOGGLE, x: PAD, y: TITLE_Y - TOGGLE / 2, w: TOGGLE, h: TOGGLE }];
-  // collapsed: the panel around its gear button alone, the same margin on every side
+function layout(toggleId, open, items, lines, panelW, lists = true) {
+  const rects = [{ id: toggleId, x: PAD, y: TITLE_Y - TOGGLE / 2, w: TOGGLE, h: TOGGLE }];
+  // collapsed: the panel around its toggle button alone, the same margin on every side
   if (!open) return { width: 2 * PAD + TOGGLE, height: 2 * (TITLE_Y - TOGGLE / 2) + TOGGLE, rects };
   let y = bodyTop(lines);
   // buttons from `x` to the panel's right padding; a group's settings and a
@@ -212,11 +212,12 @@ function PanelSlab({ w, h }) {
 }
 
 /**
- * The options panel. Its group's userData.bounds is its visible panel in the
- * group's metres ({ left, right, top, bottom, button: the gear's centre }),
- * for docking and stacking it (see Grab.jsx), which also places the group.
+ * A panel of the template (see menu.js), `onSelect(id)` for its buttons. Its
+ * group's userData.bounds is its visible panel in the group's metres ({
+ * left, right, top, bottom, button: the toggle button's centre }), for
+ * docking and stacking it (see Grab.jsx), which also places the group.
  */
-export function XRMenuPanel({ title, status, items, labels, open, onSelect, groupRef, ...groupProps }) {
+export function XRPanel({ toggle, title, status, items, labels, open, onSelect, groupRef, ...groupProps }) {
   const mesh = useRef(null);
   const [pointerKey, setPointerKey] = useState(null);
   const [gazeKey, setGazeKey] = useState(null);
@@ -234,14 +235,14 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
   // too tall: the panel stops at maxH, the settings scroll between the title
   // and the bottom edge, and the scrollbar gets a column on the right
   // (a layout's height doesn't depend on its width)
-  const scrollable = useMemo(() => open && layout(open, items, lines, panelW).height > maxH, [open, items, lines, panelW, maxH]);
+  const scrollable = useMemo(() => open && layout(toggle.id, open, items, lines, panelW).height > maxH, [open, items, lines, panelW, maxH]);
   const scrollColumn = scrollable ? SCROLL_GAP + SCROLL_COLUMN - PAD / 2 : 0;
   const buttonsW = size && open ? size.w - scrollColumn : panelW;
-  const { width: contentW, height: contentH, rects } = useMemo(() => layout(open, items, lines, buttonsW), [open, items, lines, buttonsW]);
+  const { width: contentW, height: contentH, rects } = useMemo(() => layout(toggle.id, open, items, lines, buttonsW), [open, items, lines, buttonsW]);
   // the open panel's height with its dropdowns closed: the top edge stays put
   // as a list opens below or the grip is dragged, and collapsed, the gear
   // keeps to the top-left corner
-  const openHeight = useMemo(() => Math.min(layout(true, items, lines, panelW, false).height, MAX_VIEW_H), [items, lines, panelW]);
+  const openHeight = useMemo(() => Math.min(layout(toggle.id, true, items, lines, panelW, false).height, MAX_VIEW_H), [items, lines, panelW]);
 
   const width = contentW + scrollColumn;
   const height = scrollable ? maxH : contentH;
@@ -300,11 +301,11 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
       centredText(ctx, fit(ctx, status, width - 2 * PAD), PAD, TITLE_Y + 34 + LINE_H / 2);
     }
 
-    // the gear, top left
-    const toggle = rects[0];
-    drawButtonFrame(ctx, toggle, { hot: hovered === MENU_TOGGLE });
-    const gear = iconImage('gear', redraw);
-    if (gear.complete && gear.naturalWidth) ctx.drawImage(gear, toggle.x + (toggle.w - GEAR_ICON) / 2, toggle.y + (toggle.h - GEAR_ICON) / 2, GEAR_ICON, GEAR_ICON);
+    // the toggle button, top left
+    const button = rects[0];
+    drawButtonFrame(ctx, button, { hot: hovered === toggle.id });
+    const icon = iconImage(toggle.icon, redraw);
+    if (icon.complete && icon.naturalWidth) ctx.drawImage(icon, button.x + (button.w - GEAR_ICON) / 2, button.y + (button.h - GEAR_ICON) / 2, GEAR_ICON, GEAR_ICON);
 
     // the settings, scrolled, within their view
     ctx.save();
@@ -436,7 +437,7 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
   /** The control at canvas px (px, py): the gear, a scroll control, or a setting or choice in view. */
   const controlAt = (px, py) => {
     const inside = (q, y = q.y) => px >= q.x && px <= q.x + q.w && py >= y && py <= y + q.h;
-    if (inside(rects[0])) return MENU_TOGGLE;
+    if (inside(rects[0])) return toggle.id;
     if (grip && inside(grip)) return RESIZE;
     if (bar) for (const q of [bar.up, bar.down, bar.track]) if (inside(q)) return q.id;
     if (py < viewTop || py > viewBottom) return null;
@@ -555,64 +556,6 @@ export function XRMenuPanel({ title, status, items, labels, open, onSelect, grou
         {/* both sides: walked around or flipped by a grip, the panel stays visible and usable */}
         <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
         <PanelSlab w={width * PX_M} h={height * PX_M} />
-      </mesh>
-    </group>
-  );
-}
-
-// The View panel: one button, the monitor, back to the Normal view (out of
-// XR), as in grid-game-threejs: drawn like the collapsed options panel, and
-// docked beneath it on a controller at first (see Grab.jsx, which places it).
-const VIEW_PANEL_PX = 2 * PAD + TOGGLE;
-const VIEW_PANEL_M = VIEW_PANEL_PX * PX_M;
-const VIEW_BOUNDS = { left: -VIEW_PANEL_M / 2, right: VIEW_PANEL_M / 2, top: VIEW_PANEL_M / 2, bottom: -VIEW_PANEL_M / 2, button: 0 };
-
-export function XRViewPanel({ onExit, groupRef }) {
-  const [hot, setHot] = useState(false);
-  const [iconsLoaded, setIconsLoaded] = useState(0);
-  const canvas = useMemo(() => {
-    const c = document.createElement('canvas');
-    c.width = c.height = VIEW_PANEL_PX;
-    return c;
-  }, []);
-  const texture = useMemo(() => {
-    const t = new THREE.CanvasTexture(canvas);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 8;
-    return t;
-  }, [canvas]);
-  useEffect(() => () => texture.dispose(), [texture]);
-
-  useEffect(() => {
-    const ctx = canvas.getContext('2d');
-    const size = VIEW_PANEL_PX;
-    ctx.clearRect(0, 0, size, size);
-    roundRect(ctx, 4, 4, size - 8, size - 8, FRAME_RADIUS);
-    ctx.fillStyle = 'rgba(12, 16, 28, 0.9)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    const button = { x: PAD, y: PAD, w: TOGGLE, h: TOGGLE };
-    drawButtonFrame(ctx, button, { hot });
-    const icon = iconImage('monitor', () => setIconsLoaded((n) => n + 1));
-    if (icon.complete && icon.naturalWidth) ctx.drawImage(icon, PAD + (TOGGLE - GEAR_ICON) / 2, PAD + (TOGGLE - GEAR_ICON) / 2, GEAR_ICON, GEAR_ICON);
-    texture.needsUpdate = true;
-  }, [canvas, texture, hot, iconsLoaded]);
-
-  return (
-    <group ref={groupRef} userData={{ bounds: VIEW_BOUNDS }}>
-      <mesh
-        onPointerOver={() => setHot(true)}
-        onPointerOut={() => setHot(false)}
-        onClick={(e) => {
-          e.stopPropagation();
-          onExit();
-        }}
-      >
-        <planeGeometry args={[VIEW_PANEL_M, VIEW_PANEL_M]} />
-        <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent depthWrite={false} toneMapped={false} />
-        <PanelSlab w={VIEW_PANEL_M} h={VIEW_PANEL_M} />
       </mesh>
     </group>
   );

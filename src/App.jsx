@@ -4,26 +4,28 @@ import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore, useXRSessionModeSupported } from '@react-three/xr';
 import Scene from './Scene.jsx';
 import Icon from './Icon.jsx';
-import { MENU_TOGGLE } from './XRMenuPanel.jsx';
 import { phoneARSessionInit } from './PhoneStereo.jsx';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
 import { pulse } from './grip.js';
 import {
-  MENU_TITLE,
+  MENU_TOGGLE,
   PICK_PREFIX,
+  VIEW_TOGGLE,
   TEXT_SIZE,
   VIBRATION,
   splitLabel,
   XR_VIEWS,
   availableViews,
   menuItems,
+  optionsPanel,
   parseSlide,
   pickedChoice,
   possibleLabels,
   settingItems,
   slideId,
   snapToSlider,
+  viewPanel,
 } from './menu.js';
 
 // How the display settings work:
@@ -365,18 +367,21 @@ function XROverlay({ children }) {
 }
 
 /**
- * The windowed panel: draws the shared menu model (see XRMenuPanel for XR).
+ * The windowed panels: draws the panels' template (menu.js optionsPanel,
+ * viewPanel; see XRMenuPanel for XR), stacked in the top-left corner.
  * In 3D: SBS each eye gets its own copy, squeezed into its half like the
  * scene, so the display stretches both back into one panel at screen depth.
  * 3D: Interlaced needs nothing: a flat panel already lies on both eyes' rows.
  * `resizable`: a handle at the bottom-right corner sets its width and the
  * height it may grow to (double-click it to fit the buttons again).
+ * `panels`: the template's panels, Options first; `onSelect(id)` for their
+ * buttons. A click outside them closes Options.
  */
-function Hud({ menu, error, sbs, resizable }) {
+function Hud({ panels, onSelect, error, sbs, resizable }) {
   const panel = useRef(null);
   const [size, setSize] = useState(null); // { width, height } dragged to, in px
-  useClickOutside(panel, menu.open, () => menu.onSelect(MENU_TOGGLE));
-  const panelProps = { menu, error, size: resizable ? size : null, onResize: resizable ? setSize : null };
+  useClickOutside(panel, panels[0].open, () => onSelect(MENU_TOGGLE));
+  const panelProps = { panels, onSelect, error, size: resizable ? size : null, onResize: resizable ? setSize : null };
   if (!sbs) return <HudPanel {...panelProps} panelRef={panel} />;
   return (
     // one element around both copies: a click in either is inside the menu
@@ -423,32 +428,58 @@ function ResizeHandle({ stretch = 1, onResize }) {
   return <div className="hud-resize" onPointerDown={onPointerDown} onDoubleClick={() => onResize(null)} title="Resize (double-click to fit)" />;
 }
 
-function HudPanel({ menu, error, panelRef, size, onResize, stretch }) {
-  const toggle = () => menu.onSelect(MENU_TOGGLE);
-  // collapsed, the panel keeps only its gear button, which stays where it was
-  if (!menu.open) {
+/** The panels, top to bottom; `panelRef` on them together. Options (the first) is the resizable one and shows `error`. */
+function HudPanel({ panelRef, panels, onSelect, error, size, onResize, stretch }) {
+  return (
+    <div className="hud-stack" ref={panelRef}>
+      {panels.map((panel, i) => (
+        <Panel
+          key={panel.id}
+          panel={panel}
+          onSelect={onSelect}
+          error={i === 0 ? error : null}
+          size={i === 0 ? size : null}
+          onResize={i === 0 ? onResize : null}
+          stretch={stretch}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** One panel of the template: its toggle button, top left; open, its title beside it and its items beneath. */
+function Panel({ panel, onSelect, error, size, onResize, stretch }) {
+  const { toggle, open } = panel;
+  // (a panel with items opens and closes; one without is just its button)
+  const button = (
+    <button
+      className="collapse"
+      onClick={() => onSelect(toggle.id)}
+      aria-label={toggle.label}
+      aria-expanded={panel.items.length ? open : undefined}
+      title={toggle.label}
+    >
+      <Icon name={toggle.icon} />
+    </button>
+  );
+  // collapsed, the panel keeps only its button, which stays where it was
+  if (!open) {
     return (
       <aside className="hud collapsed">
-        <header>
-          <button className="collapse" onClick={toggle} aria-label="Show options" aria-expanded="false" title="Options">
-            <Icon name="gear" />
-          </button>
-        </header>
+        <header>{button}</header>
       </aside>
     );
   }
   return (
-    <aside className="hud" ref={panelRef} style={size ? { '--hud-width': `${size.width}px`, '--hud-height': `${size.height}px` } : undefined}>
+    <aside className="hud" style={size ? { '--hud-width': `${size.width}px`, '--hud-height': `${size.height}px` } : undefined}>
       <header>
-        <button className="collapse" onClick={toggle} aria-label="Hide options" aria-expanded="true" title="Options">
-          <Icon name="gear" />
-        </button>
-        <h1>{menu.title}</h1>
+        {button}
+        <h1>{panel.title}</h1>
       </header>
 
       <div className="hud-body">
-        {menu.status && <p className="stats">{menu.status}</p>}
-        <MenuButtons items={menu.items} labels={menu.labels} onSelect={menu.onSelect} />
+        {panel.status && <p className="stats">{panel.status}</p>}
+        <MenuButtons items={panel.items} labels={panel.labels} onSelect={onSelect} />
         {error && (
           <p className="note error" role="alert">
             {error}
@@ -550,6 +581,10 @@ export default function App() {
       actions.closeDropdown(choice.id);
       choose(choice.id, choice.value);
     } else if (id === MENU_TOGGLE) actions.toggleMenu();
+    else if (id === VIEW_TOGGLE) {
+      if (inXR) exitXR();
+      else selectView('hmd');
+    }
     else if (items.find((item) => item.id === id)?.group) actions.toggleGroup(id);
     else if (settingItems(items).find((item) => item.id === id)?.dropdown) actions.toggleDropdown(id);
     else if (id === 'shadow') actions.toggleShadow();
@@ -587,37 +622,33 @@ export default function App() {
     }
   };
   const labels = useMemo(() => possibleLabels({ passthroughAvailable, views }), [passthroughAvailable, views]);
-  const menu = {
-    title: MENU_TITLE,
-    labels,
-    status,
-    open: state.menuOpen,
-    items,
-    onSelect,
-  };
+  // the panels' template, shared by the windowed and XR renderers; the View
+  // panel only where a headset can be used
+  const panels = [optionsPanel({ open: state.menuOpen, status, items, labels })];
+  if (views.includes('hmd')) panels.push(viewPanel(inXR));
 
   return (
     <>
       <Canvas flat dpr={[1, 2]} camera={{ position: [0, 1.9, 1.2], fov: 60, near: 0.05, far: 1000 }}>
         <XR store={store}>
           <Suspense fallback={null}>
-            <Scene poly={poly} state={state} actions={actions} menu={menu} menuOverlay={menuOverlay} phone={phone} onExitXR={exitXR} />
+            <Scene poly={poly} state={state} actions={actions} panels={panels} onSelect={onSelect} menuOverlay={menuOverlay} phone={phone} />
           </Suspense>
         </XR>
       </Canvas>
       {state.handheld ? (
         <>
           <CardboardOverlay split={state.stereo} onTap={actions.nextShape} onExit={exitXR} />
-          {menuOverlay && <Hud menu={menu} error={error} />}
+          {menuOverlay && <Hud panels={panels.slice(0, 1)} onSelect={onSelect} error={error} />}
         </>
       ) : sessionActive ? (
         menuOverlay && (
           <XROverlay>
-            <Hud menu={menu} error={error} />
+            <Hud panels={panels.slice(0, 1)} onSelect={onSelect} error={error} />
           </XROverlay>
         )
       ) : (
-        <Hud menu={menu} error={error} sbs={state.view === 'sbs'} resizable />
+        <Hud panels={panels} onSelect={onSelect} error={error} sbs={state.view === 'sbs'} resizable />
       )}
     </>
   );

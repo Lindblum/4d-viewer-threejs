@@ -10,6 +10,39 @@ import { EDGE_LOOKS, EDGE_LOOK_LABELS } from './Edges.jsx';
 
 export const MENU_TITLE = '4D Polytope Viewer';
 
+/** The panels' toggle buttons: Options' gear (opens and closes it) and the View panel's (into XR or back). */
+export const MENU_TOGGLE = 'menu:toggle';
+export const VIEW_TOGGLE = 'view:toggle';
+
+/**
+ * The panels, one template for both renderers (the windowed one in App.jsx,
+ * the XR one in XRMenuPanel.jsx), stacked top to bottom: each { id, toggle:
+ * { id, icon, label }, title, status?, open, items, labels? } (items and
+ * labels: see menuItems, possibleLabels). Closed, a panel shows only its
+ * toggle button, top left; open, the title beside it and its items beneath.
+ *
+ * Options: the gear, the title, the XR status line, the menu. `menu`: { open,
+ * status, items, labels }.
+ */
+export function optionsPanel(menu) {
+  return {
+    id: 'options',
+    toggle: { id: MENU_TOGGLE, icon: 'gear', label: menu.open ? 'Hide options' : 'Show options' },
+    title: MENU_TITLE,
+    ...menu,
+  };
+}
+
+/**
+ * The View panel, as in grid-game-threejs: one button, never opened, that
+ * switches between the Normal view and XR: HMD Stereo, showing the one it
+ * switches to (outside XR the headset, in XR the monitor).
+ */
+export function viewPanel(inXR) {
+  const label = inXR ? 'Normal view' : 'XR: HMD Stereo';
+  return { id: 'view', toggle: { id: VIEW_TOGGLE, icon: inXR ? 'monitor' : 'vr', label }, title: label, open: false, items: [] };
+}
+
 /** Options → Background, in list order (passthrough last). */
 export const BACKGROUNDS = ['solid', 'skybox', 'passthrough'];
 const BACKGROUND_LABELS = { solid: 'Solid', skybox: 'Skybox', passthrough: 'Passthrough (XR Only)' };

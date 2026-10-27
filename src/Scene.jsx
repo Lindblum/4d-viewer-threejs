@@ -7,7 +7,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { CameraBackground, CardboardRig } from './Cardboard.jsx';
 import { GazeReticle } from './Gaze.jsx';
 import { ControllerGuide } from './ControllerGuide.jsx';
-import { XRMenuPanel, XRViewPanel } from './XRMenuPanel.jsx';
+import { XRPanel } from './XRMenuPanel.jsx';
 import { useControllerGrips } from './Grab.jsx';
 import { SOLID_BACKGROUND } from './menu.js';
 import { advanceWaves, createFaceMaterial, isSeeThrough } from './faceLooks.js';
@@ -283,10 +283,11 @@ function Player({ model, panels, poly, vibration, textSize, homeScale, children 
 }
 
 /**
- * `menuOverlay`: the page shows the menu over the scene (Phone AR), so no panel in it.
- * `onExitXR`: the View panel on a headset's left controller, back to the Normal view.
+ * `panels`: the panels' template (Options, and the View panel where a
+ * headset can be used; see menu.js), `onSelect(id)` for their buttons.
+ * `menuOverlay`: the page shows Options over the scene (Phone AR), so no panel in it.
  */
-export default function Scene({ poly, state, actions, menu, menuOverlay, phone, onExitXR }) {
+export default function Scene({ poly, state, actions, panels, onSelect, menuOverlay, phone }) {
   const inSession = useXR((s) => s.mode === 'immersive-vr' || s.mode === 'immersive-ar');
   const inAR = useXR((s) => s.mode === 'immersive-ar');
   // a phone's AR session drawn as two lens-corrected eyes
@@ -304,7 +305,8 @@ export default function Scene({ poly, state, actions, menu, menuOverlay, phone, 
   const model = useRef(null);
   const menuPanel = useRef(null);
   const viewPanel = useRef(null);
-  const panels = useMemo(() => ({ menu: menuPanel, view: viewPanel }), []);
+  const panelRefs = useMemo(() => ({ menu: menuPanel, view: viewPanel }), []);
+  const [options, view] = panels;
   const polytopeProps = {
     model,
     inSession,
@@ -353,14 +355,14 @@ export default function Scene({ poly, state, actions, menu, menuOverlay, phone, 
       <PolytopeView {...polytopeProps} />
       <Player
         model={model}
-        panels={panels}
+        panels={panelRefs}
         poly={poly}
         vibration={state.vibration}
         textSize={state.textSize}
         homeScale={phone && state.stereo ? PHONE_STEREO_MENU_SCALE : 1}
       >
-        {immersive && !menuOverlay && <XRMenuPanel {...menu} groupRef={menuPanel} />}
-        {inSession && !phone && <XRViewPanel groupRef={viewPanel} onExit={onExitXR} />}
+        {immersive && !menuOverlay && <XRPanel {...options} onSelect={onSelect} groupRef={menuPanel} />}
+        {inSession && view && <XRPanel {...view} onSelect={onSelect} groupRef={viewPanel} />}
       </Player>
       {inSession && hasControllers && state.controllerGuide && <ControllerGuide textSize={state.textSize} />}
       {immersive && !hasControllers && <GazeReticle />}

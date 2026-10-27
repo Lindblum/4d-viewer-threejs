@@ -21,10 +21,20 @@ html, body, #root {
 
 canvas { display: block; touch-action: none; }
 
-.hud {
+/* Options, and the View panel beneath it, in the top-left corner */
+.hud-stack {
   position: fixed;
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-height: calc(100dvh - 2 * max(12px, env(safe-area-inset-top)));
+}
+
+.hud {
+  position: relative;
   /* as wide as the widest possible button (see .menu-sizer), or as dragged */
   width: var(--hud-width, max-content);
   max-width: calc(100vw - 24px);
@@ -142,7 +152,9 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
 .hud {
   display: flex;
   flex-direction: column;
-  max-height: min(var(--hud-height, 100dvh), calc(100dvh - 2 * max(12px, env(safe-area-inset-top))));
+  flex: 0 1 auto; /* shrinks to leave the View panel room */
+  min-height: 0;
+  max-height: var(--hud-height, none);
 }
 
 /* the bottom-right corner, dragged to resize: three diagonal grip lines */
