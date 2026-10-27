@@ -7,6 +7,7 @@
 import { SHAPES } from './polytopeGeometry.js';
 import { FACE_LOOKS, FACE_LOOK_LABELS } from './faceLooks.js';
 import { EDGE_LOOKS, EDGE_LOOK_LABELS } from './Edges.jsx';
+import { XR_RESOLUTION } from './xrResolution.js';
 
 export const MENU_TITLE = '4D Polytope Viewer';
 
@@ -92,17 +93,16 @@ export const PICK_PREFIX = 'pick:';
 
 /** Accessibility → Text Size: a multiplier on the panels' text and icons, 75% to 200% (as in grid-game-threejs). */
 export const TEXT_SIZE = Object.freeze({ min: 0.75, max: 2, step: 0.25, default: 1 });
-/** Accessibility → Vibration: how strong the controllers' haptics are, 0 (off) to 2 (1: as made; above, every buzz stronger, up to the controller's most). */
-export const VIBRATION = Object.freeze({ min: 0, max: 2, step: 0.1, default: 1 });
 
 /** `value` within `spec` ({ min, max, step, default }), snapped to its steps. */
 export function snapToSlider(spec, value) {
-  const n = Number(value);
+  const n = value == null || value === '' ? NaN : Number(value); // (nothing saved: the default, not 0)
   const v = Math.min(spec.max, Math.max(spec.min, Number.isFinite(n) ? n : spec.default));
   return +(Math.round(v / spec.step) * spec.step).toFixed(4);
 }
 
 const SLIDE_PREFIX = 'slide:';
+const SLIDE_END_PREFIX = 'slideEnd:';
 /** The id a slider sends to set `value`: "slide:<id>=<value>" (a pointer's press or drag, the gaze's stare). */
 export const slideId = (id, value) => `${SLIDE_PREFIX}${id}=${value}`;
 /** A "slide:<id>=<value>" id's { id, value }, or null for any other id. */
@@ -111,6 +111,9 @@ export function parseSlide(slide) {
   const [id, value] = slide.slice(SLIDE_PREFIX.length).split('=');
   return { id, value: Number(value) };
 }
+/** The id a slider sends when it's let go ("slideEnd:<id>"), and back: the slider's id, or null. */
+export const slideEndId = (id) => `${SLIDE_END_PREFIX}${id}`;
+export const parseSlideEnd = (id) => (id?.startsWith(SLIDE_END_PREFIX) ? id.slice(SLIDE_END_PREFIX.length) : null);
 
 const percent = (v) => `${Math.round(v * 100)}%`;
 
@@ -157,8 +160,8 @@ export function menuItems(state, env) {
   });
   return [
     group('model', 'Model', 'shape', ['shape', 'faces', 'edges', 'shadow', 'rotate']),
-    group('video', 'Video', 'video', ['background', 'view']),
-    group('accessibility', 'Accessibility', 'accessibility', ['textSize', 'vibration', 'controllerGuide']),
+    group('video', 'Video', 'video', ['background', 'view', 'xrResolution']),
+    group('accessibility', 'Accessibility', 'accessibility', ['textSize', 'controllerGuide']),
   ];
 }
 
@@ -227,17 +230,18 @@ function settingsById(state, env) {
     { id: 'shadow', label: `2D Shadow: ${state.showShadow ? 'On' : 'Off'}`, icon: state.showShadow ? 'on' : 'off' },
     { id: 'rotate', label: `Rotate: ${state.paused ? 'Off' : 'On'}`, icon: state.paused ? 'pause' : 'rotate' },
     {
+      id: 'xrResolution',
+      // (fixed when an XR session starts: changed during one, the session starts again when the slider's let go)
+      label: `XR Resolution: ${percent(state.xrResolution)}${state.xrResolutionActive != null && state.xrResolution !== state.xrResolutionActive ? ' (on release)' : ''}`,
+      icon: 'xrResolution',
+      slider: { ...XR_RESOLUTION, value: state.xrResolution },
+      title: "The headset's resolution: lower draws faster",
+    },
+    {
       id: 'textSize',
       label: `Text Size: ${percent(state.textSize)}`,
       icon: 'textSize',
       slider: { ...TEXT_SIZE, value: state.textSize },
-    },
-    {
-      id: 'vibration',
-      label: `Vibration: ${state.vibration > 0 ? percent(state.vibration) : 'Off'}`,
-      icon: state.vibration > 0 ? 'vibrationOn' : 'vibrationOff',
-      slider: { ...VIBRATION, value: state.vibration },
-      title: 'How strongly the XR controllers buzz',
     },
     {
       id: 'controllerGuide',
@@ -272,13 +276,13 @@ export function possibleLabels(env) {
     for (const flag of [false, true])
       for (const background of backgrounds)
         for (const view of env.views)
-          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], textSize: 1, vibration: 1, controllerGuide: flag }, env)))
+          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], textSize: 1, controllerGuide: flag, xrResolution: 1, xrResolutionActive: null }, env)))
             labels.add(item.label);
   for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
   for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
   // the sliders' widest values, and Controller Guide both ways
   labels.add(`Text Size: ${percent(TEXT_SIZE.max)}`);
-  labels.add(`Vibration: ${percent(VIBRATION.max)}`);
+  labels.add(`XR Resolution: ${percent(XR_RESOLUTION.max)} (on release)`);
   for (const flag of [false, true]) labels.add(`Controller Guide: ${flag ? 'On' : 'Off'}`);
   return [...labels];
 }

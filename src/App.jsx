@@ -5,24 +5,25 @@ import { XR, createXRStore, useXRSessionModeSupported } from '@react-three/xr';
 import Scene from './Scene.jsx';
 import Icon from './Icon.jsx';
 import { phoneARSessionInit } from './PhoneStereo.jsx';
+import { XR_RESOLUTION, setXRViewportScale } from './xrResolution.js';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
-import { pulse } from './grip.js';
 import {
   MENU_TOGGLE,
   PICK_PREFIX,
   VIEW_TOGGLE,
   TEXT_SIZE,
-  VIBRATION,
   splitLabel,
   XR_VIEWS,
   availableViews,
   menuItems,
   optionsPanel,
   parseSlide,
+  parseSlideEnd,
   pickedChoice,
   possibleLabels,
   settingItems,
+  slideEndId,
   slideId,
   snapToSlider,
   viewPanel,
@@ -49,6 +50,7 @@ const xrOptions = {
   // headset emulator on localhost during development only
   emulate: import.meta.env.DEV ? 'metaQuest3' : false,
   foveation: 0.5,
+  frameBufferScaling: undefined, // Options → Video → XR Resolution, set as each session starts (see enterXR)
 };
 const store = createXRStore(xrOptions);
 
@@ -83,8 +85,17 @@ const wrap = (i, n) => (i + n) % n;
 // `list` with `id` added, or taken out if it was there
 const toggleIn = (id) => (list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
-// Accessibility settings are remembered in this browser
+// Accessibility settings and XR Resolution are remembered in this browser
 const ACCESSIBILITY_KEY = '4d-viewer.accessibility';
+const XR_RESOLUTION_KEY = '4d-viewer.xrResolution';
+
+function loadXRResolution() {
+  try {
+    return snapToSlider(XR_RESOLUTION, JSON.parse(localStorage.getItem(XR_RESOLUTION_KEY)));
+  } catch {
+    return XR_RESOLUTION.default;
+  }
+}
 
 function loadAccessibility() {
   let saved = {};
@@ -95,7 +106,6 @@ function loadAccessibility() {
   }
   return {
     textSize: snapToSlider(TEXT_SIZE, saved.textSize),
-    vibration: snapToSlider(VIBRATION, saved.vibration),
     controllerGuide: saved.controllerGuide === true,
   };
 }
@@ -111,10 +121,11 @@ function useViewerState() {
   const [faces, setFaces] = useState('glow'); // see faceLooks.js
   const [edges, setEdges] = useState('off'); // see Edges.jsx
   const [paused, setPaused] = useState(false);
+  const [keepXRPose, setKeepXRPose] = useState(false); // the XR session is starting again (XR Resolution): the model stays put
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
   const [groups, setGroups] = useState([]); // the groups (Model / Video / Accessibility) whose settings are open, likewise
   const [dropdowns, setDropdowns] = useState([]); // the dropdowns whose lists are open, likewise
-  const [accessibility, setAccessibility] = useState(loadAccessibility); // { textSize, vibration, controllerGuide }
+  const [accessibility, setAccessibility] = useState(loadAccessibility); // { textSize, controllerGuide }
   useEffect(() => {
     try {
       localStorage.setItem(ACCESSIBILITY_KEY, JSON.stringify(accessibility));
@@ -122,6 +133,17 @@ function useViewerState() {
       // (not remembered)
     }
   }, [accessibility]);
+  const [xrResolution, setXRResolution] = useState(loadXRResolution);
+  const [xrResolutionActive, setXRResolutionActive] = useState(null); // the XR session's own (fixed when it starts), while in one
+  useEffect(() => {
+    try {
+      localStorage.setItem(XR_RESOLUTION_KEY, JSON.stringify(xrResolution));
+    } catch {
+      // (not remembered)
+    }
+  }, [xrResolution]);
+  // turned down during a session: shown at once, each eye drawn into less of the framebuffer
+  useEffect(() => setXRViewportScale(xrResolution, xrResolutionActive), [xrResolution, xrResolutionActive]);
   // Text Size: the windowed panel's text and icons (styles.css --text-scale)
   useEffect(() => {
     document.documentElement.style.setProperty('--text-scale', String(accessibility.textSize));
@@ -151,8 +173,10 @@ function useViewerState() {
       toggleDropdown: (id) => setDropdowns(toggleIn(id)),
       closeDropdown: (id) => setDropdowns((list) => list.filter((x) => x !== id)),
       setTextSize: (v) => setAccessibility((a) => ({ ...a, textSize: snapToSlider(TEXT_SIZE, v) })),
-      setVibration: (v) => setAccessibility((a) => ({ ...a, vibration: snapToSlider(VIBRATION, v) })),
       toggleControllerGuide: () => setAccessibility((a) => ({ ...a, controllerGuide: !a.controllerGuide })),
+      setXRResolution: (v) => setXRResolution(snapToSlider(XR_RESOLUTION, v)),
+      setXRResolutionActive,
+      setKeepXRPose,
     }),
     [],
   );
@@ -174,6 +198,9 @@ function useViewerState() {
     groups,
     dropdowns,
     ...accessibility,
+    xrResolution,
+    xrResolutionActive,
+    keepXRPose,
   };
   return [state, actions];
 }
@@ -276,6 +303,8 @@ function MenuList({ items, onSelect }) {
             value={value}
             aria-label={splitLabel(item.label).name}
             onChange={(e) => onSelect(slideId(item.id, Number(e.target.value)))}
+            onPointerUp={() => onSelect(slideEndId(item.id))}
+            onKeyUp={() => onSelect(slideEndId(item.id))}
           />
         </label>
       );
@@ -515,10 +544,11 @@ export default function App() {
   const menuOverlay = phone && inXR && !viewerState.stereo && (viewerState.handheld || domOverlay);
   const [error, setError] = useState(null);
 
-  // into an XR view, straight from the tap
+  // into an XR view, straight from the tap, at XR Resolution; whether it started
   const enterXR = async (stereo) => {
     setError(null);
     let label = 'AR';
+    xrOptions.frameBufferScaling = state.xrResolution;
     try {
       if (phone && support.ar) await enterPhoneAR();
       else if (phone) {
@@ -534,6 +564,53 @@ export default function App() {
     } catch (e) {
       console.error(`[4d-viewer] could not start ${label}`, e);
       setError(`Couldn't start ${label}: ${describe(e)}`);
+      return false;
+    }
+    if (store.getState().session) actions.setXRResolutionActive(state.xrResolution);
+    return true;
+  };
+  // the session ended: no resolution of its own
+  useEffect(() => {
+    if (!sessionActive) actions.setXRResolutionActive(null);
+  }, [sessionActive, actions]);
+
+  /**
+   * XR Resolution let go at a new value during a session: the session ends
+   * and starts again at it, the model, the panels and where you stand kept.
+   * If the browser won't start one without a fresh tap, the next tap or key
+   * anywhere on the page goes back in.
+   */
+  const restartingXR = useRef(false);
+  const [restartWanted, setRestartWanted] = useState(false);
+  useEffect(() => {
+    if (!restartWanted) return;
+    setRestartWanted(false);
+    restartXR();
+  });
+  const restartXR = async () => {
+    const session = store.getState().session;
+    if (!session || state.handheld || restartingXR.current || state.xrResolution === state.xrResolutionActive) return;
+    restartingXR.current = true;
+    actions.setKeepXRPose(true);
+    try {
+      const ended = new Promise((resolve) => session.addEventListener('end', resolve, { once: true }));
+      session.end();
+      await ended;
+      if (await enterXR(state.stereo)) return;
+      setError('XR Resolution changed: tap anywhere to go back into XR');
+      const back = (e) => {
+        window.removeEventListener('pointerup', back, true);
+        window.removeEventListener('keydown', back, true);
+        if (store.getState().session) return;
+        e.preventDefault();
+        e.stopPropagation();
+        enterXR(state.stereo).finally(() => actions.setKeepXRPose(false));
+      };
+      window.addEventListener('pointerup', back, true);
+      window.addEventListener('keydown', back, true);
+    } finally {
+      restartingXR.current = false;
+      if (store.getState().session) actions.setKeepXRPose(false);
     }
   };
   // out of XR
@@ -574,6 +651,7 @@ export default function App() {
   const onSelect = (id) => {
     const slide = parseSlide(id);
     if (slide) slideTo(slide.id, slide.value);
+    else if (parseSlideEnd(id) === 'xrResolution') setRestartWanted(true); // (let go: the new resolution takes a new session)
     else if (id.startsWith(PICK_PREFIX)) {
       // a choice from an open dropdown's list, which then closes
       const choice = pickedChoice(items, id);
@@ -593,13 +671,7 @@ export default function App() {
   };
   const slideTo = (id, value) => {
     if (id === 'textSize') actions.setTextSize(value);
-    else if (id === 'vibration') {
-      const v = snapToSlider(VIBRATION, value);
-      if (v === state.vibration) return;
-      actions.setVibration(v);
-      // a buzz at the new strength, to feel it
-      for (const source of store.getState().session?.inputSources ?? []) pulse(source.gamepad, 0.6, 60, v);
-    }
+    else if (id === 'xrResolution') actions.setXRResolution(value);
   };
   const choose = (id, value) => {
     if (id === 'shape') actions.setShape(value);

@@ -188,7 +188,7 @@ function SkyEnvironment() {
  * Its shadow is the same shape squashed flat onto the floor straight below,
  * in the same Faces and Edges looks at half strength.
  */
-function PolytopeView({ model, poly, look, edges, speed, visible, showShadow, inSession, onSelect }) {
+function PolytopeView({ model, poly, look, edges, speed, visible, showShadow, inSession, keepPose, onSelect }) {
   const [hovered, setHovered] = useState(false);
   const shadow = useRef(null);
   const shadowBody = useRef(null);
@@ -197,13 +197,14 @@ function PolytopeView({ model, poly, look, edges, speed, visible, showShadow, in
     document.body.style.cursor = hovered ? 'pointer' : '';
   }, [hovered]);
 
-  // leaving XR puts the model back where the windowed view looks
+  // leaving XR puts the model back where the windowed view looks (not when
+  // the session is only starting again, at a new XR Resolution)
   useEffect(() => {
-    if (inSession || !model.current) return;
+    if (inSession || keepPose || !model.current) return;
     model.current.position.fromArray(POLY_POSITION);
     model.current.quaternion.identity();
     model.current.scale.setScalar(1);
-  }, [inSession, model]);
+  }, [inSession, keepPose, model]);
 
   // priority -1: turn the shape before anything reads its vertices this frame (the edges)
   useFrame((_, dt) => {
@@ -257,9 +258,9 @@ const _head = new THREE.Vector3();
  * grip's). The grip buttons move, turn and scale the model, or carry, dock
  * and undock the panels (see Grab.jsx), which travel with the player.
  */
-function Player({ model, panels, poly, vibration, textSize, homeScale, children }) {
+function Player({ model, panels, poly, textSize, homeScale, children }) {
   const origin = useRef(null);
-  const holding = useControllerGrips({ model, panels, origin, poly, vibration, textSize, home: MENU_HOME, homeScale });
+  const holding = useControllerGrips({ model, panels, origin, poly, textSize, home: MENU_HOME, homeScale });
   useXRControllerLocomotion(
     (velocity, turn, delta, state) => {
       const o = origin.current;
@@ -310,6 +311,7 @@ export default function Scene({ poly, state, actions, panels, onSelect, menuOver
   const polytopeProps = {
     model,
     inSession,
+    keepPose: state.keepXRPose,
     poly,
     look: state.faces,
     edges: state.edges,
@@ -357,12 +359,11 @@ export default function Scene({ poly, state, actions, panels, onSelect, menuOver
         model={model}
         panels={panelRefs}
         poly={poly}
-        vibration={state.vibration}
         textSize={state.textSize}
         homeScale={phone && state.stereo ? PHONE_STEREO_MENU_SCALE : 1}
       >
-        {immersive && !menuOverlay && <XRPanel {...options} onSelect={onSelect} groupRef={menuPanel} />}
-        {inSession && view && <XRPanel {...view} onSelect={onSelect} groupRef={viewPanel} />}
+        {immersive && !menuOverlay && <XRPanel panel={options} onSelect={onSelect} groupRef={menuPanel} />}
+        {inSession && view && <XRPanel panel={view} onSelect={onSelect} groupRef={viewPanel} />}
       </Player>
       {inSession && hasControllers && state.controllerGuide && <ControllerGuide textSize={state.textSize} />}
       {immersive && !hasControllers && <GazeReticle />}

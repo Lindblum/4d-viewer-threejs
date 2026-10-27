@@ -115,14 +115,11 @@ const textSize = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="
 <path d="M14.25 19.25 17.75 10l3.5 9.25M15.5 16.25h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`;
 
-// Vibration: a controller's handle between buzz marks, or struck through when off
-const vibrationOn = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-<rect x="8.25" y="3.25" width="7.5" height="17.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
-<path d="M4.75 8.5 3 10.25l1.75 1.75L3 13.75l1.75 1.75M19.25 8.5 21 10.25 19.25 12 21 13.75l-1.75 1.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
-const vibrationOff = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-<rect x="8.25" y="3.25" width="7.5" height="17.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
-<path d="M3.5 3.5 20.5 20.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+// XR Resolution: a pixel grid, its cells finer toward one corner (as in grid-game-threejs)
+const xrResolution = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<rect x="3.75" y="3.75" width="16.5" height="16.5" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+<path d="M12 3.75v16.5M3.75 12h16.5" stroke="currentColor" stroke-width="1.5"/>
+<path d="M7.9 3.75V12M3.75 7.9H12" stroke="currentColor" stroke-width="1" stroke-opacity="0.6"/>
 </svg>`;
 
 // Controller Guide: a gamepad, struck through when off
@@ -161,8 +158,7 @@ const ICONS = {
   check: recolour(check),
   accessibility,
   textSize,
-  vibrationOn,
-  vibrationOff,
+  xrResolution,
   controllerGuideOn,
   controllerGuideOff,
 };

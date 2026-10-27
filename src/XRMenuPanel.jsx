@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { iconSvg } from './Icon.jsx';
-import { parseSlide, settingItems, slideId, snapToSlider, splitLabel } from './menu.js';
+import { parseSlide, settingItems, slideEndId, slideId, snapToSlider, splitLabel } from './menu.js';
 import { useGazeTarget } from './Gaze.jsx';
 
 // The panels in XR. Each draws a panel of the same template as the windowed
@@ -212,12 +212,13 @@ function PanelSlab({ w, h }) {
 }
 
 /**
- * A panel of the template (see menu.js), `onSelect(id)` for its buttons. Its
+ * `panel`: a panel of the template (see menu.js), `onSelect(id)` for its buttons. Its
  * group's userData.bounds is its visible panel in the group's metres ({
  * left, right, top, bottom, button: the toggle button's centre }), for
  * docking and stacking it (see Grab.jsx), which also places the group.
  */
-export function XRPanel({ toggle, title, status, items, labels, open, onSelect, groupRef, ...groupProps }) {
+export function XRPanel({ panel, onSelect, groupRef }) {
+  const { toggle, title, status, items, labels, open } = panel;
   const mesh = useRef(null);
   const [pointerKey, setPointerKey] = useState(null);
   const [gazeKey, setGazeKey] = useState(null);
@@ -477,7 +478,13 @@ export function XRPanel({ toggle, title, status, items, labels, open, onSelect, 
     e.target.setPointerCapture?.(e.pointerId);
     drag.current = { kind, pointerId: e.pointerId, at, scroll: scrollTop, size: { w: width, h: height } };
   };
-  useGazeTarget(mesh, select, setGazeKey, gazePick);
+  // the gaze sets a slider in one go: set, then let go
+  const gazeSelect = (key) => {
+    select(key);
+    const slide = parseSlide(key);
+    if (slide) onSelect(slideEndId(slide.id));
+  };
+  useGazeTarget(mesh, gazeSelect, setGazeKey, gazePick);
 
   const centre = [((width - panelW) / 2) * PX_M, ((openHeight - height) / 2) * PX_M];
   const bounds = {
@@ -488,7 +495,7 @@ export function XRPanel({ toggle, title, status, items, labels, open, onSelect, 
     button: centre[0] - (width / 2) * PX_M + (PAD + TOGGLE / 2) * PX_M,
   };
   return (
-    <group ref={groupRef} userData={{ bounds }} {...groupProps}>
+    <group ref={groupRef} userData={{ bounds }}>
       <mesh
         ref={mesh}
         position={[centre[0], centre[1], 0]}
@@ -535,9 +542,11 @@ export function XRPanel({ toggle, title, status, items, labels, open, onSelect, 
             });
         }}
         onPointerUp={(e) => {
-          if (drag.current?.pointerId !== e.pointerId) return;
+          const d = drag.current;
+          if (d?.pointerId !== e.pointerId) return;
           e.target.releasePointerCapture?.(e.pointerId);
           drag.current = null;
+          if (d.kind === 'slider' && d.slider) onSelect(slideEndId(d.slider.id));
         }}
         onPointerOut={() => setPointerKey(null)}
         onWheel={(e) => {

@@ -19,8 +19,7 @@ import { applyGrips, pulse, readControllers } from './grip.js';
 // away along the ray (up) or reels it in (down), and rolls it about the ray
 // (left / right), instead of moving or turning the player.
 //
-// While a controller is inside the model it buzzes softly. Every buzz is as
-// strong as Accessibility → Vibration says.
+// While a controller is inside the model it buzzes softly.
 //
 // Without controllers (gaze, phones) the menu stands at `home` instead and
 // the View panel hides.
@@ -90,7 +89,7 @@ function rotationAbout(origin, axis, angle) {
  * bigger). Returns a ref to which hands' grips hold something now
  * ({ left, right }), whose sticks are then theirs, not the player's.
  */
-export function useControllerGrips({ model, panels, origin, poly, vibration, textSize, home, homeScale }) {
+export function useControllerGrips({ model, panels, origin, poly, textSize, home, homeScale }) {
   const gl = useThree((s) => s.gl);
   const grabs = useRef({}); // hand -> { target: 'model' } | { target: 'panel', key, offset, point, size, grow, zone } | { target: 'none' }
   const docks = useRef({ menu: { dock: 'left' }, view: { dock: 'left' } }); // key -> { dock: hand | null, on, fly }
@@ -111,7 +110,7 @@ export function useControllerGrips({ model, panels, origin, poly, vibration, tex
     const referenceSpace = gl.xr.getReferenceSpace();
     const o = origin.current;
     const controllers = frame && o && referenceSpace ? readControllers(frame, referenceSpace, o) : {};
-    const buzz = (hand, [strength, ms]) => pulse(controllers[hand]?.gamepad, strength, ms, vibration);
+    const buzz = (hand, [strength, ms]) => pulse(controllers[hand]?.gamepad, strength, ms);
     const groupOf = (key) => panels[key]?.current ?? null;
     const shownPanels = () => Object.keys(docks.current).filter((key) => groupOf(key) && isShown(groupOf(key)));
     if (o) _originInverse.copy(o.matrixWorld).invert();
@@ -344,14 +343,14 @@ export function useControllerGrips({ model, panels, origin, poly, vibration, tex
 
     // buzz while a controller is inside the model
     const object = model.current;
-    if (!object || !isShown(object) || vibration <= 0) return;
+    if (!object || !isShown(object)) return;
     for (const hand of HANDS) {
       const c = controllers[hand];
       if (!c || now < (nextBuzz.current[hand] ?? 0)) continue;
       // checking at the pulse rate, not every frame, keeps the big polytopes cheap
       nextBuzz.current[hand] = now + BUZZ_EVERY;
       if (!poly.containsPoint(object.worldToLocal(_v.copy(c.position)))) continue;
-      pulse(c.gamepad, BUZZ_STRENGTH, BUZZ_MS, vibration);
+      pulse(c.gamepad, BUZZ_STRENGTH, BUZZ_MS);
     }
   });
 

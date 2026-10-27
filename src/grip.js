@@ -16,14 +16,8 @@ const _spanPrev = new THREE.Vector3();
 const _spanNow = new THREE.Vector3();
 const _turn = new THREE.Quaternion();
 
-/**
- * A haptic pulse on `gamepad`'s controller, `strength` (0 to 1) for `ms`, at
- * Accessibility → Vibration's `vibration` (0: none; above 1 stronger, up to
- * the controller's most).
- */
-export function pulse(gamepad, strength, ms, vibration) {
-  const intensity = Math.min(1, strength * vibration);
-  if (intensity <= 0) return;
+/** A haptic pulse on `gamepad`'s controller, `intensity` (0 to 1) for `ms`. */
+export function pulse(gamepad, intensity, ms) {
   const actuator = gamepad?.hapticActuators?.[0];
   if (actuator?.pulse) actuator.pulse(intensity, ms)?.catch?.(() => {});
   else gamepad?.vibrationActuator?.playEffect?.('dual-rumble', { duration: ms, strongMagnitude: intensity })?.catch?.(() => {});
