@@ -35,10 +35,15 @@ const PULSE = { grab: [0.6, 50], detach: [0.4, 30], dock: [0.9, 80], zone: [0.25
 /** Docked on one controller, the panels stand stacked upward in this order (the first nearest it). */
 const DOCK_STACK = ['view', 'menu'];
 // in the controller's pointing frame (-Z forward, +Y up): the stack stands on
-// this point, the first panel's button over the controller, its faces
-// tipped up toward the eyes
-const DOCK_ANCHOR = new THREE.Vector3(0, 0.05, 0.02);
-const DOCK_TILT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.5);
+// its hand's anchor, the first panel's button over the controller, its faces
+// tipped up toward the eyes. On the left hand: 1 cm left, 6 cm up, 2 cm back,
+// tilted 45° (the top leaning forward) and rolled 5°; the right hand mirrors it
+// (as tuned in grid-game-threejs: Debug → Docking)
+const dockPose = (mirror) => ({
+  anchor: new THREE.Vector3(-0.01 * mirror, 0.06, 0.02),
+  turn: new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(-45), 0, THREE.MathUtils.degToRad(5 * mirror), 'YXZ')),
+});
+const DOCK_POSE = { left: dockPose(1), right: dockPose(-1) };
 const DOCK_GAP = 0.008; // m between docked panels
 const DOCK_SCALE = 0.5; // docked, the panels are half their free size
 const DOCK_REACH = 0.12; // m: a held panel let go this near the other controller docks there
@@ -324,8 +329,9 @@ export function useControllerGrips({ model, panels, origin, poly, textSize, home
         const g = groupOf(key);
         const b = boundsOf(g);
         // standing on its bottom edge, left edges in line, each a hair in front of the last
-        _pos.set(x - b.left * sc, y - b.bottom * sc, i * 0.0005).applyQuaternion(DOCK_TILT).add(DOCK_ANCHOR);
-        _world.compose(_pos, DOCK_TILT, _scale.setScalar(sc)).premultiply(controllers[hand].rayMatrix);
+        const pose = DOCK_POSE[hand];
+        _pos.set(x - b.left * sc, y - b.bottom * sc, i * 0.0005).applyQuaternion(pose.turn).add(pose.anchor);
+        _world.compose(_pos, pose.turn, _scale.setScalar(sc)).premultiply(controllers[hand].rayMatrix);
         placeWorld(key, _world);
         const fly = docks.current[key].fly;
         if (fly) {
