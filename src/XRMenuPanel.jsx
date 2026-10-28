@@ -434,15 +434,18 @@ export function XRPanel({ panel, onSelect, groupRef }) {
     }
 
     if (open) {
-      // the resize grip: three diagonal lines into the corner
-      ctx.strokeStyle = hovered === RESIZE ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 4;
+      // the resize grip: three diagonal ridges across the corner, as in
+      // grid-game-threejs (its 2.2 cm handle, drawn 64 px wide)
+      const hot = hovered === RESIZE;
+      const k = 0.022 / PX_M / 64;
+      ctx.strokeStyle = hot ? '#9cc8ff' : 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = (hot ? 5 : 3) * k;
       ctx.lineCap = 'round';
-      const corner = { x: width - 14, y: height - 14 };
-      for (const d of [8, 17, 26]) {
+      const corner = { x: width - 14 * k, y: height - 14 * k };
+      for (const d of [18, 32, 46]) {
         ctx.beginPath();
-        ctx.moveTo(corner.x - d, corner.y);
-        ctx.lineTo(corner.x, corner.y - d);
+        ctx.moveTo(corner.x - d * k, corner.y);
+        ctx.lineTo(corner.x, corner.y - d * k);
         ctx.stroke();
       }
     }
