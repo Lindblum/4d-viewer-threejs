@@ -91,6 +91,9 @@ export function splitLabel(label) {
 
 export const PICK_PREFIX = 'pick:';
 
+/** Accessibility → Volume: the interface's sounds (the menu tick), 0 (off) to 100%. */
+export const VOLUME = Object.freeze({ min: 0, max: 1, step: 0.1, default: 1 });
+
 /** Accessibility → Text Size: a multiplier on the panels' text and icons, 75% to 200% (as in grid-game-threejs). */
 export const TEXT_SIZE = Object.freeze({ min: 0.75, max: 2, step: 0.25, default: 1 });
 
@@ -161,7 +164,7 @@ export function menuItems(state, env) {
   return [
     group('model', 'Model', 'shape', ['shape', 'faces', 'edges', 'shadow', 'rotate']),
     group('video', 'Video', 'video', ['background', 'view', 'vsync', 'xrResolution']),
-    group('accessibility', 'Accessibility', 'accessibility', ['textSize', 'controllerGuide']),
+    group('accessibility', 'Accessibility', 'accessibility', ['volume', 'textSize', 'controllerGuide']),
   ];
 }
 
@@ -244,6 +247,13 @@ function settingsById(state, env) {
       title: "The headset's resolution: lower draws faster",
     },
     {
+      id: 'volume',
+      label: `Volume: ${state.volume > 0 ? percent(state.volume) : 'Off'}`,
+      icon: state.volume > 0 ? 'soundOn' : 'soundOff',
+      slider: { ...VOLUME, value: state.volume },
+      title: "The interface's sounds (the menu tick)",
+    },
+    {
       id: 'textSize',
       label: `Text Size: ${percent(state.textSize)}`,
       icon: 'textSize',
@@ -282,12 +292,14 @@ export function possibleLabels(env) {
     for (const flag of [false, true])
       for (const background of backgrounds)
         for (const view of env.views)
-          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], textSize: 1, controllerGuide: flag, vsync: flag, xrResolution: 1, xrResolutionActive: null }, env)))
+          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], volume: 1, textSize: 1, controllerGuide: flag, vsync: flag, xrResolution: 1, xrResolutionActive: null }, env)))
             labels.add(item.label);
   for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
   for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
   // the sliders' widest values, and Controller Guide both ways
   labels.add(`Text Size: ${percent(TEXT_SIZE.max)}`);
+  labels.add(`Volume: ${percent(VOLUME.max)}`);
+  labels.add('Volume: Off');
   labels.add(`XR Resolution: ${percent(XR_RESOLUTION.max)} (on release)`);
   for (const flag of [false, true]) {
     labels.add(`Controller Guide: ${flag ? 'On' : 'Off'}`);

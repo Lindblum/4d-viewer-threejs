@@ -6,6 +6,7 @@ import Scene from './Scene.jsx';
 import Icon from './Icon.jsx';
 import { phoneARSessionInit } from './PhoneStereo.jsx';
 import { XR_RESOLUTION, setXRViewportScale } from './xrResolution.js';
+import { initSound, playTick, setVolume, wakeSoundInXR } from './sound.js';
 import { CardboardOverlay, canUseCardboard, enterCardboard, exitCardboard } from './Cardboard.jsx';
 import { DEFAULT_SHAPE_INDEX, SHAPES, buildPolytope } from './polytopeGeometry.js';
 import {
@@ -13,6 +14,7 @@ import {
   PICK_PREFIX,
   VIEW_TOGGLE,
   TEXT_SIZE,
+  VOLUME,
   splitLabel,
   XR_VIEWS,
   availableViews,
@@ -114,6 +116,7 @@ function loadAccessibility() {
     // (storage blocked or unreadable: the defaults)
   }
   return {
+    volume: snapToSlider(VOLUME, saved.volume),
     textSize: snapToSlider(TEXT_SIZE, saved.textSize),
     controllerGuide: saved.controllerGuide === true,
   };
@@ -134,7 +137,7 @@ function useViewerState() {
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
   const [groups, setGroups] = useState([]); // the groups (Model / Video / Accessibility) whose settings are open, likewise
   const [dropdowns, setDropdowns] = useState([]); // the dropdowns whose lists are open, likewise
-  const [accessibility, setAccessibility] = useState(loadAccessibility); // { textSize, controllerGuide }
+  const [accessibility, setAccessibility] = useState(loadAccessibility); // { volume, textSize, controllerGuide }
   useEffect(() => {
     try {
       localStorage.setItem(ACCESSIBILITY_KEY, JSON.stringify(accessibility));
@@ -161,6 +164,8 @@ function useViewerState() {
   }, [xrResolution]);
   // turned down during a session: shown at once, each eye drawn into less of the framebuffer
   useEffect(() => setXRViewportScale(xrResolution, xrResolutionActive), [xrResolution, xrResolutionActive]);
+  // Volume: every interface sound (the menu tick)
+  useEffect(() => setVolume(accessibility.volume), [accessibility.volume]);
   // Text Size: the windowed panel's text and icons (styles.css --text-scale)
   useEffect(() => {
     document.documentElement.style.setProperty('--text-scale', String(accessibility.textSize));
@@ -189,6 +194,7 @@ function useViewerState() {
       toggleGroup: (id) => setGroups(toggleIn(id)),
       toggleDropdown: (id) => setDropdowns(toggleIn(id)),
       closeDropdown: (id) => setDropdowns((list) => list.filter((x) => x !== id)),
+      setVolume: (v) => setAccessibility((a) => ({ ...a, volume: snapToSlider(VOLUME, v) })),
       setTextSize: (v) => setAccessibility((a) => ({ ...a, textSize: snapToSlider(TEXT_SIZE, v) })),
       toggleControllerGuide: () => setAccessibility((a) => ({ ...a, controllerGuide: !a.controllerGuide })),
       setXRResolution: (v) => setXRResolution(snapToSlider(XR_RESOLUTION, v)),
@@ -588,6 +594,12 @@ export default function App() {
     if (store.getState().session) actions.setXRResolutionActive(state.xrResolution);
     return true;
   };
+  // the page's first click or key lets the sound play; in XR (no clicks) the controllers' presses do
+  useEffect(initSound, []);
+  useEffect(() => {
+    const session = sessionActive && store.getState().session;
+    return session ? wakeSoundInXR(session) : undefined;
+  }, [sessionActive]);
   // the session ended: no resolution of its own
   useEffect(() => {
     if (!sessionActive) actions.setXRResolutionActive(null);
@@ -669,6 +681,8 @@ export default function App() {
   const items = menuItems(state, { passthroughAvailable, views, phone, checking: !support.checked && !phone });
   const onSelect = (id) => {
     const slide = parseSlide(id);
+    // (the menu tick, as in grid-game-threejs: every press, but not each step of a slider's drag nor its release)
+    if (!slide && !parseSlideEnd(id)) playTick();
     if (slide) slideTo(slide.id, slide.value);
     else if (parseSlideEnd(id) === 'xrResolution') setRestartWanted(true); // (let go: the new resolution takes a new session)
     else if (id.startsWith(PICK_PREFIX)) {
@@ -690,7 +704,8 @@ export default function App() {
     else if (id === 'vsync') actions.toggleVSync();
   };
   const slideTo = (id, value) => {
-    if (id === 'textSize') actions.setTextSize(value);
+    if (id === 'volume') actions.setVolume(value);
+    else if (id === 'textSize') actions.setTextSize(value);
     else if (id === 'xrResolution') actions.setXRResolution(value);
   };
   const choose = (id, value) => {

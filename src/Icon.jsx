@@ -11,6 +11,8 @@ import chevronDown from 'lineicons/assets/svgs/regular/chevron-down.svg?raw';
 import chevronUp from 'lineicons/assets/svgs/regular/chevron-up.svg?raw';
 import check from 'lineicons/assets/svgs/regular/check.svg?raw';
 import gamepad from 'lineicons/assets/svgs/regular/game-pad-modern-1.svg?raw';
+import volume from 'lineicons/assets/svgs/regular/volume-high.svg?raw';
+import volumeMute from 'lineicons/assets/svgs/regular/volume-mute.svg?raw';
 
 // Lineicons ship with a fixed fill; recolour to follow the surrounding text
 // and size to the font.
@@ -145,6 +147,8 @@ const controllerGuideOff = recolour(gamepad).replace(
 );
 
 const ICONS = {
+  soundOn: recolour(volume),
+  soundOff: recolour(volumeMute),
   mono: recolour(eye),
   stereo: eyes,
   vr: headset,
