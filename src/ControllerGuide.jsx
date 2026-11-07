@@ -2,8 +2,9 @@ import { useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useXRInputSourceState } from '@react-three/xr';
 import * as THREE from 'three';
+import { XR_CONTROLS as TEXTS } from './controls.js';
 
-// Accessibility → Controller Guide (XR), as in grid-game-threejs: a label
+// Accessibility → XR Control Guides, as in grid-game-threejs: a label
 // beside each of a controller's sticks, triggers and grips saying what it
 // does. Each label points, with a thin leader line, at the middle of that
 // part on the controller's own model (the motion-controllers layout's nodes
@@ -12,13 +13,6 @@ import * as THREE from 'three';
 // on its outer side, the trigger out in front. Text Size scales the labels.
 
 const HANDS = ['left', 'right'];
-/** What each part does, by hand (motion-controllers component ids); parts with nothing to do get no label. */
-const GRIP = 'Hold: move the shape, or a menu\nBoth grips: scale, turn\nTap twice: dock / undock\nTap 3 times: menus here';
-const TRIGGER = 'Point and press\nShape: next one';
-const TEXTS = {
-  left: { 'xr-standard-trigger': TRIGGER, 'xr-standard-squeeze': GRIP, 'xr-standard-thumbstick': 'Move\nGripping: push / pull, roll' },
-  right: { 'xr-standard-trigger': TRIGGER, 'xr-standard-squeeze': GRIP, 'xr-standard-thumbstick': 'Turn\nGripping: push / pull, roll' },
-};
 /** The components labelled, in the columns' order (top to bottom). */
 const COMPONENTS = ['menu', 'y-button', 'b-button', 'x-button', 'a-button', 'xr-standard-thumbstick', 'xr-standard-trigger', 'xr-standard-squeeze'];
 /** Where each component's label goes: 'inner' (the side toward the other hand), 'outer', or 'front' (ahead of it). */

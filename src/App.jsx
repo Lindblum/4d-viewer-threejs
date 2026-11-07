@@ -4,6 +4,7 @@ import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore, useXRSessionModeSupported } from '@react-three/xr';
 import Scene from './Scene.jsx';
 import Icon from './Icon.jsx';
+import { getLastInput, subscribeLastInput, watchXRInput } from './controlsGuide.js';
 import { phoneARSessionInit } from './PhoneStereo.jsx';
 import { XR_RESOLUTION, setXRViewportScale } from './xrResolution.js';
 import { initSound, playTick, setVolume, wakeSoundInXR } from './sound.js';
@@ -52,7 +53,7 @@ const xrOptions = {
   // headset emulator on localhost during development only
   emulate: import.meta.env.DEV ? 'metaQuest3' : false,
   foveation: 0.5,
-  frameBufferScaling: undefined, // Options → Video → XR Resolution, set as each session starts (see enterXR)
+  frameBufferScaling: undefined, // Options → Display → XR Resolution, set as each session starts (see enterXR)
 };
 const store = createXRStore(xrOptions);
 
@@ -135,7 +136,7 @@ function useViewerState() {
   const [paused, setPaused] = useState(false);
   const [keepXRPose, setKeepXRPose] = useState(false); // the XR session is starting again (XR Resolution): the model stays put
   const [menuOpen, setMenuOpen] = useState(true); // shared by the windowed and XR panels
-  const [groups, setGroups] = useState([]); // the groups (Model / Video / Accessibility) whose settings are open, likewise
+  const [groups, setGroups] = useState([]); // the groups (Model / Display / Accessibility) whose settings are open, likewise
   const [dropdowns, setDropdowns] = useState([]); // the dropdowns whose lists are open, likewise
   const [accessibility, setAccessibility] = useState(loadAccessibility); // { volume, textSize, controllerGuide }
   useEffect(() => {
@@ -145,7 +146,7 @@ function useViewerState() {
       // (not remembered)
     }
   }, [accessibility]);
-  const [vsync, setVSync] = useState(loadVSync); // Options → Video → VSync (see FramePacing)
+  const [vsync, setVSync] = useState(loadVSync); // Options → Display → VSync (see FramePacing)
   useEffect(() => {
     try {
       localStorage.setItem(VSYNC_KEY, JSON.stringify(vsync));
@@ -350,6 +351,8 @@ function MenuList({ items, onSelect }) {
         {item.group?.open && (
           <div className="menu-group">
             <MenuList items={item.group.items} onSelect={onSelect} />
+            {/* Controls: a drawing of what the input last touched does (controlsGuide.js) */}
+            {item.group.guide && <div className="controls-guide" dangerouslySetInnerHTML={{ __html: item.group.guide.svg }} />}
           </div>
         )}
         {item.dropdown?.open && (
@@ -554,6 +557,7 @@ export default function App() {
   const phone = useMemo(isPhone, []);
   const headset = useMemo(isHeadsetBrowser, []);
   const sessionActive = useSyncExternalStore(store.subscribe, getSessionActive);
+  const input = useSyncExternalStore(subscribeLastInput, getLastInput); // (the input last touched: Options → Controls shows it)
   const sessionMode = useSyncExternalStore(store.subscribe, getSessionMode);
   const domOverlay = useSyncExternalStore(store.subscribe, getDomOverlay);
   const inXR = sessionActive || viewerState.handheld;
@@ -599,6 +603,11 @@ export default function App() {
   useEffect(() => {
     const session = sessionActive && store.getState().session;
     return session ? wakeSoundInXR(session) : undefined;
+  }, [sessionActive]);
+  // ...and count as the input last touched (see controlsGuide.js)
+  useEffect(() => {
+    const session = sessionActive && store.getState().session;
+    return session ? watchXRInput(session) : undefined;
   }, [sessionActive]);
   // the session ended: no resolution of its own
   useEffect(() => {
@@ -678,7 +687,7 @@ export default function App() {
         ? `XR: phone AR, tracked, ${state.stereo ? 'stereo' : 'mono'}`
         : `XR: headset ${sessionMode === 'immersive-ar' ? 'AR' : 'VR'}`;
 
-  const items = menuItems(state, { passthroughAvailable, views, phone, checking: !support.checked && !phone });
+  const items = menuItems(state, { passthroughAvailable, views, phone, input, checking: !support.checked && !phone });
   const onSelect = (id) => {
     const slide = parseSlide(id);
     // (the menu tick, as in grid-game-threejs: every press, but not each step of a slider's drag nor its release)

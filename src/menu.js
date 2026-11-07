@@ -1,5 +1,5 @@
 // Options menu model shared by the windowed panel (DOM) and the XR panel
-// (drawn on a canvas): three groups, Model, Video and Accessibility, each
+// (drawn on a canvas): four groups, Model, Controls, Display and Accessibility, each
 // opening a list of setting buttons beneath it, each "Name: Value". A
 // dropdown opens a list of choices beneath it (a chevron on its right); a
 // slider sets a value along its track; the rest toggle when pressed.
@@ -8,6 +8,8 @@ import { SHAPES } from './polytopeGeometry.js';
 import { FACE_LOOKS, FACE_LOOK_LABELS } from './faceLooks.js';
 import { EDGE_LOOKS, EDGE_LOOK_LABELS } from './Edges.jsx';
 import { XR_RESOLUTION } from './xrResolution.js';
+import { INPUT_NAMES, controlsGuide } from './controlsGuide.js';
+import { CONTROLS } from './controls.js';
 
 export const MENU_TITLE = '4D Polytope Viewer';
 
@@ -145,7 +147,7 @@ export function pickedChoice(items, pickId) {
 }
 
 /**
- * Items: the groups Model, Video and Accessibility, { id, label, icon, group: { open, items } },
+ * Items: the groups Model, Controls, Display and Accessibility, { id, label, icon, group: { open, items } },
  * which, when open (in `state.groups`), list their settings beneath, indented like
  * a dropdown's choices. Settings: { id, label ("Name: Value", see splitLabel),
  * icon, disabled?, title?, dropdown?, slider? }. `slider`: { min, max, step, value }. `dropdown`: { open, options: [{ id,
@@ -161,9 +163,19 @@ export function menuItems(state, env) {
     icon,
     group: { open: state.groups.includes(id), items: ids.map((setting) => settings[setting]) },
   });
+  // Controls: no settings, but a drawing of what the input last touched does (controlsGuide.js)
+  const input = env.input ?? 'mk';
+  const controlsOpen = state.groups.includes('controls');
+  const controls = {
+    id: 'controls',
+    label: `Controls: ${INPUT_NAMES[input]}`,
+    icon: 'controls',
+    group: { open: controlsOpen, items: [], guide: controlsOpen ? controlsGuide(input, CONTROLS) : null },
+  };
   return [
     group('model', 'Model', 'shape', ['shape', 'faces', 'edges', 'shadow', 'rotate']),
-    group('video', 'Video', 'video', ['background', 'view', 'vsync', 'xrResolution']),
+    controls,
+    group('display', 'Display', 'display', ['view', 'background', 'vsync', 'xrResolution']),
     group('accessibility', 'Accessibility', 'accessibility', ['volume', 'textSize', 'controllerGuide']),
   ];
 }
@@ -261,7 +273,7 @@ function settingsById(state, env) {
     },
     {
       id: 'controllerGuide',
-      label: `Controller Guide: ${state.controllerGuide ? 'On' : 'Off'}`,
+      label: `XR Control Guides: ${state.controllerGuide ? 'On' : 'Off'}`,
       icon: state.controllerGuide ? 'controllerGuideOn' : 'controllerGuideOff',
       title: "In XR, labels beside the controllers' buttons saying what they do",
     },
@@ -296,14 +308,15 @@ export function possibleLabels(env) {
             labels.add(item.label);
   for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
   for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
-  // the sliders' widest values, and Controller Guide both ways
+  // the sliders' widest values, and XR Control Guides both ways
   labels.add(`Text Size: ${percent(TEXT_SIZE.max)}`);
   labels.add(`Volume: ${percent(VOLUME.max)}`);
   labels.add('Volume: Off');
   labels.add(`XR Resolution: ${percent(XR_RESOLUTION.max)} (on release)`);
   for (const flag of [false, true]) {
-    labels.add(`Controller Guide: ${flag ? 'On' : 'Off'}`);
+    labels.add(`XR Control Guides: ${flag ? 'On' : 'Off'}`);
     labels.add(`VSync: ${flag ? 'On' : 'Off'}`);
   }
+  for (const name of Object.values(INPUT_NAMES)) labels.add(`Controls: ${name}`);
   return [...labels];
 }

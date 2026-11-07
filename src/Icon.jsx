@@ -53,12 +53,8 @@ const monitor = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="n
 <path d="M12 16.25v3.5M8.5 19.75h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 </svg>`;
 
-// Video: the screen with a play arrow in it
-const video = monitor.replace(
-  '</svg>',
-  `<path d="M10.25 7.6v5.3l4.4-2.65-4.4-2.65Z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
-</svg>`,
-);
+// Display: the screen, as Normal view's
+const display = monitor;
 
 const monitorSbs = monitor.replace(
   '</svg>',
@@ -104,6 +100,14 @@ const headsetOff = headset.replace(
 </svg>`,
 );
 
+// Controls: a gamepad, as grid-game-threejs's (its outline, D-pad and two buttons)
+const controls = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+<path d="M7.2 7.2h9.6l3.84 1.44 1.92 7.2-2.4 2.88-4.32-3.36H8.16l-4.32 3.36-2.4-2.88 1.92-7.2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M7.2 9.6v3.36M5.52 11.28h3.36" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="15.84" cy="10.32" r="1" fill="currentColor"/>
+<circle cx="17.76" cy="12.48" r="1" fill="currentColor"/>
+</svg>`;
+
 // Accessibility: the figure with open arms, in a circle
 const accessibility = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
 <circle cx="12" cy="12" r="9.25" stroke="currentColor" stroke-width="1.5"/>
@@ -138,7 +142,7 @@ const xrResolution = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fi
 <path d="M7.9 3.75V12M3.75 7.9H12" stroke="currentColor" stroke-width="1" stroke-opacity="0.6"/>
 </svg>`;
 
-// Controller Guide: a gamepad, struck through when off
+// XR Control Guides: a gamepad, struck through when off
 const controllerGuideOn = recolour(gamepad);
 const controllerGuideOff = recolour(gamepad).replace(
   '</svg>',
@@ -164,7 +168,7 @@ const ICONS = {
   shape: cube,
   edges,
   monitor,
-  video,
+  display,
   monitorSbs,
   monitorInterlaced,
   phone,
@@ -175,6 +179,7 @@ const ICONS = {
   dropdownOpen: recolour(chevronUp),
   check: recolour(check),
   accessibility,
+  controls,
   textSize,
   xrResolution,
   vsyncOn,

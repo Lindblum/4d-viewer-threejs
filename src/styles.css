@@ -219,3 +219,6 @@ button:hover { background: rgba(255, 255, 255, 0.16); }
   background: rgba(10, 14, 28, 0.6);
   font-size: 18px;
 }
+
+/* Options → Controls: the drawing of what the input last touched does (controlsGuide.js) */
+.controls-guide svg { display: block; width: 100%; max-width: 420px; height: auto; } /* (wider, its text would outgrow the menu's) */
