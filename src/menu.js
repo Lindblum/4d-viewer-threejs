@@ -200,6 +200,7 @@ function settingsById(state, env) {
           return {
             value: b,
             label: BACKGROUND_LABELS[b],
+            icon: b, // (as the field shows it)
             disabled: unavailable,
             title: unavailable ? 'Passthrough needs an XR headset or a phone camera' : undefined,
           };
@@ -296,15 +297,18 @@ const shapeLabel = (shape) => `${shape.name} ${shape.schlafli}`;
  * (The groups' labels are short, so they don't set it; the panels also fit
  * the dropdowns' choices, two to a row.)
  */
-export function possibleLabels(env) {
+function labelSets(env) {
   const labels = new Set();
+  const sliderNames = new Set(); // (a slider's row is its label and a track)
   const backgrounds = BACKGROUNDS.filter((b) => b !== 'passthrough' || env.passthroughAvailable);
   for (const shape of SHAPES)
     for (const flag of [false, true])
       for (const background of backgrounds)
         for (const view of env.views)
-          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], volume: 1, textSize: 1, controllerGuide: flag, vsync: flag, xrResolution: 1, xrResolutionActive: null }, env)))
+          for (const item of Object.values(settingsById({ shape, showShadow: flag, paused: flag, background, view, faces: 'glow', edges: 'off', dropdowns: [], volume: 1, textSize: 1, controllerGuide: flag, vsync: flag, xrResolution: 1, xrResolutionActive: null }, env))) {
             labels.add(item.label);
+            if (item.slider) sliderNames.add(splitLabel(item.label).name);
+          }
   for (const faces of FACE_LOOKS) labels.add(`Faces: ${FACE_LOOK_LABELS[faces]}`);
   for (const edges of EDGE_LOOKS) labels.add(`Edges: ${EDGE_LOOK_LABELS[edges]}`);
   // the sliders' widest values, and XR Control Guides both ways
@@ -317,5 +321,9 @@ export function possibleLabels(env) {
     labels.add(`VSync: ${flag ? 'On' : 'Off'}`);
   }
   for (const name of Object.values(INPUT_NAMES)) labels.add(`Controls: ${name}`);
-  return [...labels];
+  return { labels: [...labels], sliderNames: [...sliderNames] };
 }
+
+export const possibleLabels = (env) => labelSets(env).labels;
+/** The names of the sliders among possibleLabels: the windowed panel sizes their rows with a track. */
+export const possibleSliderNames = (env) => labelSets(env).sliderNames;

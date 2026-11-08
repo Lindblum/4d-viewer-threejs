@@ -100,14 +100,14 @@ const controls = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="
 <circle cx="17.76" cy="12.48" r="1" fill="currentColor"/>
 </svg>`;
 
-// Accessibility: the figure with open arms, in a circle
+// Accessibility: a figure with open arms, in a circle (grid-game-threejs's, drawn on this grid; the same in every project)
 const accessibility = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-<circle cx="12" cy="12" r="9.25" stroke="currentColor" stroke-width="1.5"/>
-<circle cx="12" cy="7.4" r="1.4" fill="currentColor"/>
-<path d="M7.5 10.1 12 11l4.5-.9M12 11v3.2m0 0-2.2 3.6m2.2-3.6 2.2 3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="12" cy="12" r="9.6" stroke="currentColor" stroke-width="1.5"/>
+<circle cx="12" cy="6.5" r="1.5" fill="currentColor"/>
+<path d="M6.25 9.6h11.5M12 9.6v4.3M9.1 18.7l2.9-4.8 2.9 4.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`;
 
-// Text Size: a big A beside a small one
+// Text Size: a big A beside a small one (the same in every project)
 const textSize = `<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
 <path d="M2.75 19.25 8 4.75l5.25 14.5M4.6 14.25h6.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M14.25 19.25 17.75 10l3.5 9.25M15.5 16.25h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
