@@ -23,7 +23,7 @@ npm run build      # static site in dist/ (relative paths, any host)
 | --- | --- |
 | Shape | The 5 Platonic solids and the 6 regular 4D polytopes |
 | Background | Solid, Skybox, Passthrough (XR) |
-| View Mode | Normal, 3D: SBS (3D TVs), 3D: Interlaced (passive 3D monitors, use fullscreen), XR: HMD Stereo, XR: Phone AR, XR: Phone Viewer |
+| View Mode | Normal, 3D: SBS (3D TVs), XR: HMD Stereo, XR: Phone AR, XR: Phone Viewer |
 | Faces | Glow, Glass, Water, Soap, Metal, Frosted |
 | Edges | Off, Glow, Glass, Chrome |
 | 2D Shadow, Rotate | On / Off |
@@ -44,6 +44,6 @@ npm run build      # static site in dist/ (relative paths, any host)
 - `src/Scene.jsx`, `src/App.jsx`: the scene, app state, keyboard and windowed menu
 - `src/menu.js`, `src/XRMenuPanel.jsx`: the shared options menu and its XR (canvas) panel
 - `src/faceLooks.js`, `src/Edges.jsx`: the Faces and Edges looks
-- `src/SideBySide.jsx`, `src/Interlaced.jsx`: windowed stereo views
+- `src/SideBySide.jsx`: the windowed stereo view
 - `src/PhoneStereo.jsx`, `src/Cardboard.jsx`, `src/CardboardLens.js`: phone XR and phone viewers
 - `src/Grab.jsx`, `src/grip.js`, `src/Gaze.jsx`: grip controls and gaze dwell-to-click
